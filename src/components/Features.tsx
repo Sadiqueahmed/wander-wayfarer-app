@@ -142,12 +142,12 @@ const Features = () => {
               Join thousands of travelers who have discovered the beauty of India with our AI-powered trip planning platform.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <button className="bg-white text-primary px-8 py-3 rounded-lg font-semibold hover:bg-white/90 transition-colors">
+              <a href="/plan" className="bg-white text-primary px-8 py-3 rounded-lg font-semibold hover:bg-white/90 transition-colors inline-block">
                 Start Planning Free
-              </button>
-              <button className="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white/10 transition-colors">
-                View Sample Itinerary
-              </button>
+              </a>
+              <a href="/ai-planner" className="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white/10 transition-colors inline-block">
+                Try AI Planner
+              </a>
             </div>
           </div>
         </div>

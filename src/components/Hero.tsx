@@ -18,7 +18,8 @@ const Hero = () => {
 
   const handleSearch = () => {
     console.log("Search data:", searchData);
-    // Handle trip planning logic
+    // Redirect to trip planner with search data
+    window.location.href = `/plan?from=${encodeURIComponent(searchData.from)}&to=${encodeURIComponent(searchData.to)}&date=${searchData.startDate}&travelers=${searchData.travelers}`;
   };
 
   return (

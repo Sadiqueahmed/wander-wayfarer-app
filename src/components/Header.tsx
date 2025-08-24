@@ -37,6 +37,12 @@ const Header = () => {
                 {item.name}
               </a>
             ))}
+            <a
+              href="/ai-planner"
+              className="text-foreground hover:text-primary transition-colors duration-200 font-medium flex items-center"
+            >
+              AI Planner
+            </a>
           </nav>
 
           {/* Desktop Actions */}
@@ -45,12 +51,16 @@ const Header = () => {
               <Search className="h-4 w-4 mr-2" />
               Search
             </Button>
-            <Button variant="outline" size="sm">
-              <User className="h-4 w-4 mr-2" />
-              Login
+            <Button variant="outline" size="sm" asChild>
+              <a href="/auth">
+                <User className="h-4 w-4 mr-2" />
+                Login
+              </a>
             </Button>
-            <Button size="sm" className="gradient-hero text-white border-0">
-              Sign Up
+            <Button size="sm" className="gradient-hero text-white border-0" asChild>
+              <a href="/auth">
+                Sign Up
+              </a>
             </Button>
           </div>
 
