@@ -52,6 +52,12 @@ export default {
 					DEFAULT: 'hsl(var(--card))',
 					foreground: 'hsl(var(--card-foreground))'
 				},
+				// Travel-specific colors
+				travel: {
+					success: 'hsl(var(--travel-success))',
+					warning: 'hsl(var(--travel-warning))',
+					info: 'hsl(var(--travel-info))'
+				},
 				sidebar: {
 					DEFAULT: 'hsl(var(--sidebar-background))',
 					foreground: 'hsl(var(--sidebar-foreground))',
