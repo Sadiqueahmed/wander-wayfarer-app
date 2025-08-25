@@ -7,6 +7,10 @@ import Index from "./pages/Index";
 import PlanTrip from "./pages/PlanTrip";
 import AIPlanner from "./pages/AIPlanner";
 import Destinations from "./pages/Destinations";
+import Campendium from "./pages/Campendium";
+import Northeast from "./pages/Northeast";
+import Guides from "./pages/Guides";
+import Community from "./pages/Community";
 import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
 
@@ -23,6 +27,10 @@ const App = () => (
           <Route path="/plan" element={<PlanTrip />} />
           <Route path="/ai-planner" element={<AIPlanner />} />
           <Route path="/destinations" element={<Destinations />} />
+          <Route path="/campendium" element={<Campendium />} />
+          <Route path="/northeast" element={<Northeast />} />
+          <Route path="/guides" element={<Guides />} />
+          <Route path="/community" element={<Community />} />
           <Route path="/auth" element={<AuthPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
