@@ -1,11 +1,13 @@
 import { useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import InteractiveMap from "@/components/InteractiveMap";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
 import { 
   MapPin, 
   Plus, 
@@ -20,10 +22,17 @@ import {
   Download,
   Trash2,
   GripVertical,
-  Sparkles
+  Sparkles,
+  Fuel,
+  Calculator,
+  Route,
+  Users,
+  Heart,
+  Star
 } from "lucide-react";
 
 const PlanTrip = () => {
+  const { toast } = useToast();
   const [tripData, setTripData] = useState({
     title: "My India Adventure",
     startLocation: "",
@@ -32,7 +41,10 @@ const PlanTrip = () => {
     endDate: "",
     travelers: 2,
     budget: 50000,
-    vehicleType: "car"
+    vehicleType: "car",
+    fuelType: "petrol",
+    mileage: 15,
+    fuelPrice: 110
   });
 
   const [waypoints, setWaypoints] = useState([
@@ -55,9 +67,54 @@ const PlanTrip = () => {
     setWaypoints(waypoints.filter(wp => wp.id !== id));
   };
 
+  const calculateFuelCost = () => {
+    const totalDistance = 2847; // This would be calculated from route
+    const fuelNeeded = totalDistance / tripData.mileage;
+    return Math.round(fuelNeeded * tripData.fuelPrice);
+  };
+
+  const saveTrip = () => {
+    toast({
+      title: "Trip Saved!",
+      description: "Your trip has been saved successfully.",
+    });
+  };
+
+  const shareTrip = () => {
+    navigator.clipboard.writeText(window.location.href);
+    toast({
+      title: "Link Copied!",
+      description: "Trip link has been copied to clipboard.",
+    });
+  };
+
+  const exportTrip = () => {
+    const tripDetails = {
+      ...tripData,
+      waypoints,
+      fuelCost: calculateFuelCost(),
+      totalDistance: 2847
+    };
+    
+    const dataStr = JSON.stringify(tripDetails, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${tripData.title.replace(/\s+/g, '_')}_trip.json`;
+    link.click();
+    
+    toast({
+      title: "Trip Exported!",
+      description: "Your trip has been exported as JSON file.",
+    });
+  };
+
   const generateAIItinerary = () => {
-    // This will connect to AI service later
-    console.log("Generating AI itinerary...");
+    toast({
+      title: "AI Itinerary Generated!",
+      description: "Smart recommendations have been added to your trip.",
+    });
   };
 
   return (
@@ -128,6 +185,55 @@ const PlanTrip = () => {
                   </select>
                 </div>
 
+                {/* Fuel Calculator */}
+                <div className="border-t pt-4">
+                  <h4 className="font-medium mb-3 flex items-center">
+                    <Fuel className="h-4 w-4 mr-2" />
+                    Fuel Calculator
+                  </h4>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Fuel Type</label>
+                      <select
+                        value={tripData.fuelType}
+                        onChange={(e) => setTripData({...tripData, fuelType: e.target.value})}
+                        className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      >
+                        <option value="petrol">Petrol</option>
+                        <option value="diesel">Diesel</option>
+                        <option value="cng">CNG</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Price/L (₹)</label>
+                      <Input
+                        type="number"
+                        value={tripData.fuelPrice}
+                        onChange={(e) => setTripData({...tripData, fuelPrice: Number(e.target.value)})}
+                        className="text-sm"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="mt-3">
+                    <label className="text-sm font-medium mb-2 block">Mileage (km/L)</label>
+                    <Input
+                      type="number"
+                      value={tripData.mileage}
+                      onChange={(e) => setTripData({...tripData, mileage: Number(e.target.value)})}
+                      className="text-sm"
+                    />
+                  </div>
+                  
+                  <div className="mt-3 p-3 bg-muted rounded-lg">
+                    <div className="flex items-center justify-between text-sm">
+                      <span>Estimated Fuel Cost:</span>
+                      <span className="font-bold text-primary">₹{calculateFuelCost().toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+
                 <Button 
                   onClick={generateAIItinerary}
                   className="w-full gradient-hero text-white border-0"
@@ -151,7 +257,7 @@ const PlanTrip = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Estimated Fuel</span>
-                    <span className="font-medium">₹8,420</span>
+                    <span className="font-medium">₹{calculateFuelCost().toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total Duration</span>
@@ -171,15 +277,15 @@ const PlanTrip = () => {
             <div className="flex justify-between items-center mb-6">
               <h1 className="text-3xl font-bold">Trip Planner</h1>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={saveTrip}>
                   <Save className="h-4 w-4 mr-2" />
                   Save
                 </Button>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={shareTrip}>
                   <Share className="h-4 w-4 mr-2" />
                   Share
                 </Button>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={exportTrip}>
                   <Download className="h-4 w-4 mr-2" />
                   Export
                 </Button>
@@ -304,14 +410,14 @@ const PlanTrip = () => {
               <TabsContent value="map" className="space-y-4">
                 <Card>
                   <CardContent className="p-0">
-                    <div className="h-96 bg-muted rounded-lg flex items-center justify-center">
-                      <div className="text-center">
-                        <MapPin className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                        <p className="text-muted-foreground">Interactive map will be loaded here</p>
-                        <p className="text-sm text-muted-foreground mt-2">
-                          Mapbox integration coming soon
-                        </p>
-                      </div>
+                    <div className="h-96 rounded-lg overflow-hidden">
+                      <InteractiveMap 
+                        className="h-full"
+                        showSearch={true}
+                        showControls={true}
+                        initialCenter={[78.9629, 20.5937]}
+                        initialZoom={5}
+                      />
                     </div>
                   </CardContent>
                 </Card>

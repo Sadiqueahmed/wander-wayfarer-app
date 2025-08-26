@@ -8,27 +8,23 @@ import { Search, MapPin, Navigation, Layers, Settings } from 'lucide-react';
 
 // Temporary Mapbox token input component
 const MapboxTokenInput = ({ onTokenSet }: { onTokenSet: (token: string) => void }) => {
-  const [token, setToken] = useState('');
+  // Auto-set the provided token
+  const providedToken = 'pk.eyJ1Ijoic21va2V5IiwiYSI6ImNqa3d2N29pajAyMTkzcG1wZmczM2IwNDQifQ.NaHRdXWReFehBCY2l359Kg';
+  
+  const handleSetToken = () => {
+    onTokenSet(providedToken);
+  };
   
   return (
     <Card className="absolute top-4 left-4 right-4 z-10 p-4 bg-background/95 backdrop-blur">
       <div className="space-y-2">
-        <h3 className="font-semibold">Enter your Mapbox Public Token</h3>
+        <h3 className="font-semibold">Mapbox Integration Ready</h3>
         <p className="text-sm text-muted-foreground">
-          Get your token from <a href="https://mapbox.com/" target="_blank" className="text-primary hover:underline">mapbox.com</a>
+          Your Mapbox token is configured and ready to use
         </p>
-        <div className="flex gap-2">
-          <Input
-            type="text"
-            placeholder="pk.eyJ1IjoieW91cnVzZXJuYW1lIiwia..."
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            className="flex-1"
-          />
-          <Button onClick={() => onTokenSet(token)} disabled={!token}>
-            Set Token
-          </Button>
-        </div>
+        <Button onClick={handleSetToken} className="w-full gradient-hero text-white">
+          Initialize Map
+        </Button>
       </div>
     </Card>
   );
@@ -53,9 +49,9 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
-  const [mapboxToken, setMapboxToken] = useState<string>('');
+  const [mapboxToken, setMapboxToken] = useState<string>('pk.eyJ1Ijoic21va2V5IiwiYSI6ImNqa3d2N29pajAyMTkzcG1wZmczM2IwNDQifQ.NaHRdXWReFehBCY2l359Kg');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showTokenInput, setShowTokenInput] = useState(true);
+  const [showTokenInput, setShowTokenInput] = useState(false);
 
   // Sample POI data for India
   const samplePOIs = [

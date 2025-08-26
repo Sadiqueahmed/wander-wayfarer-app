@@ -75,6 +75,78 @@ const FeaturedDestinations = () => {
       category: "Cultural",
       highlights: ["Hornbill Festival", "War Cemetery", "Tribal Culture"],
       description: "Experience the rich tribal culture and history of the Naga people."
+    },
+    {
+      id: 7,
+      name: "Ziro Valley",
+      state: "Arunachal Pradesh",
+      image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?q=80&w=2070",
+      rating: 4.6,
+      reviews: 543,
+      duration: "3-4 days",
+      category: "Cultural",
+      highlights: ["Apatani Tribe", "Music Festival", "Pine Groves"],
+      description: "UNESCO World Heritage site known for its unique tribal culture and music festival."
+    },
+    {
+      id: 8,
+      name: "Mawlynnong",
+      state: "Meghalaya",
+      image: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?q=80&w=2070",
+      rating: 4.7,
+      reviews: 432,
+      duration: "1-2 days",
+      category: "Cultural",
+      highlights: ["Cleanest Village", "Living Root Bridge", "Tree House"],
+      description: "Asia's cleanest village with incredible living root bridges."
+    },
+    {
+      id: 9,
+      name: "Dirang",
+      state: "Arunachal Pradesh",
+      image: "https://images.unsplash.com/photo-1566552881560-0be862a7c445?q=80&w=2070",
+      rating: 4.5,
+      reviews: 298,
+      duration: "2-3 days",
+      category: "Mountain",
+      highlights: ["Hot Springs", "Apple Orchards", "Dzong Fort"],
+      description: "Charming valley town with hot springs and stunning mountain views."
+    },
+    {
+      id: 10,
+      name: "Mokokchung",
+      state: "Nagaland",
+      image: "https://images.unsplash.com/photo-1563979009-9b7d7ffbfd54?q=80&w=2070",
+      rating: 4.4,
+      reviews: 187,
+      duration: "2-3 days",
+      category: "Cultural",
+      highlights: ["Ao Naga Culture", "Traditional Villages", "Handicrafts"],
+      description: "Cultural center of the Ao Nagas with rich traditions and handicrafts."
+    },
+    {
+      id: 11,
+      name: "Cherrapunji",
+      state: "Meghalaya",
+      image: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?q=80&w=2070",
+      rating: 4.6,
+      reviews: 765,
+      duration: "2-3 days",
+      category: "Hill Station",
+      highlights: ["Wettest Place", "Living Root Bridges", "Nohkalikai Falls"],
+      description: "One of the wettest places on Earth with spectacular waterfalls."
+    },
+    {
+      id: 12,
+      name: "Bomdila",
+      state: "Arunachal Pradesh",
+      image: "https://images.unsplash.com/photo-1566552881560-0be862a7c445?q=80&w=2070",
+      rating: 4.3,
+      reviews: 234,
+      duration: "2-3 days",
+      category: "Mountain",
+      highlights: ["Buddhist Monastery", "Apple Orchards", "Craft Center"],
+      description: "Scenic hill station with Buddhist monasteries and craft centers."
     }
   ];
 
