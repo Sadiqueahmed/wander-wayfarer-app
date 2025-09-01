@@ -14,7 +14,256 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      destinations: {
+        Row: {
+          best_time: string | null
+          category: string
+          coordinates: unknown | null
+          created_at: string
+          description: string | null
+          duration: string | null
+          entry_fee: string | null
+          highlights: string[] | null
+          id: string
+          images: string[] | null
+          is_featured: boolean | null
+          location: string
+          name: string
+          rating: number | null
+          review_count: number | null
+          state: string | null
+          updated_at: string
+        }
+        Insert: {
+          best_time?: string | null
+          category: string
+          coordinates?: unknown | null
+          created_at?: string
+          description?: string | null
+          duration?: string | null
+          entry_fee?: string | null
+          highlights?: string[] | null
+          id?: string
+          images?: string[] | null
+          is_featured?: boolean | null
+          location: string
+          name: string
+          rating?: number | null
+          review_count?: number | null
+          state?: string | null
+          updated_at?: string
+        }
+        Update: {
+          best_time?: string | null
+          category?: string
+          coordinates?: unknown | null
+          created_at?: string
+          description?: string | null
+          duration?: string | null
+          entry_fee?: string | null
+          highlights?: string[] | null
+          id?: string
+          images?: string[] | null
+          is_featured?: boolean | null
+          location?: string
+          name?: string
+          rating?: number | null
+          review_count?: number | null
+          state?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          full_name: string | null
+          id: string
+          preferences: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          preferences?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          preferences?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      trip_reviews: {
+        Row: {
+          created_at: string
+          id: string
+          images: string[] | null
+          rating: number
+          review_text: string | null
+          trip_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          images?: string[] | null
+          rating: number
+          review_text?: string | null
+          trip_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          images?: string[] | null
+          rating?: number
+          review_text?: string | null
+          trip_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_reviews_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trips: {
+        Row: {
+          budget: number | null
+          created_at: string
+          description: string | null
+          end_date: string | null
+          end_location: string
+          estimated_fuel_cost: number | null
+          fuel_price: number | null
+          fuel_type: string | null
+          id: string
+          is_public: boolean | null
+          mileage: number | null
+          start_date: string | null
+          start_location: string
+          status: string | null
+          title: string
+          total_distance: number | null
+          travelers: number | null
+          trip_data: Json | null
+          updated_at: string
+          user_id: string
+          vehicle_type: string | null
+        }
+        Insert: {
+          budget?: number | null
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          end_location: string
+          estimated_fuel_cost?: number | null
+          fuel_price?: number | null
+          fuel_type?: string | null
+          id?: string
+          is_public?: boolean | null
+          mileage?: number | null
+          start_date?: string | null
+          start_location: string
+          status?: string | null
+          title: string
+          total_distance?: number | null
+          travelers?: number | null
+          trip_data?: Json | null
+          updated_at?: string
+          user_id: string
+          vehicle_type?: string | null
+        }
+        Update: {
+          budget?: number | null
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          end_location?: string
+          estimated_fuel_cost?: number | null
+          fuel_price?: number | null
+          fuel_type?: string | null
+          id?: string
+          is_public?: boolean | null
+          mileage?: number | null
+          start_date?: string | null
+          start_location?: string
+          status?: string | null
+          title?: string
+          total_distance?: number | null
+          travelers?: number | null
+          trip_data?: Json | null
+          updated_at?: string
+          user_id?: string
+          vehicle_type?: string | null
+        }
+        Relationships: []
+      }
+      waypoints: {
+        Row: {
+          address: string | null
+          coordinates: unknown | null
+          created_at: string
+          description: string | null
+          estimated_cost: string | null
+          estimated_time: string | null
+          id: string
+          name: string
+          stop_order: number
+          trip_id: string
+          waypoint_type: string | null
+        }
+        Insert: {
+          address?: string | null
+          coordinates?: unknown | null
+          created_at?: string
+          description?: string | null
+          estimated_cost?: string | null
+          estimated_time?: string | null
+          id?: string
+          name: string
+          stop_order: number
+          trip_id: string
+          waypoint_type?: string | null
+        }
+        Update: {
+          address?: string | null
+          coordinates?: unknown | null
+          created_at?: string
+          description?: string | null
+          estimated_cost?: string | null
+          estimated_time?: string | null
+          id?: string
+          name?: string
+          stop_order?: number
+          trip_id?: string
+          waypoint_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "waypoints_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

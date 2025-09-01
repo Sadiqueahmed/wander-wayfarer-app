@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import InteractiveMap from "@/components/InteractiveMap";
 import { Button } from "@/components/ui/button";
@@ -6,6 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { useTrips } from "@/hooks/useTrips";
+import { useToast } from "@/hooks/use-toast";
 import { 
   Search, 
   Filter, 
@@ -23,13 +28,31 @@ import {
   Settings,
   List,
   Grid,
-  Heart
+  Heart,
+  Compass,
+  Route,
+  Calendar,
+  Plus,
+  Save,
+  Share,
+  Download,
+  Navigation,
+  Fuel,
+  Utensils,
+  Menu
 } from "lucide-react";
 
 const Campendium = () => {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const { trips, createTrip } = useTrips();
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
+  const [activeSection, setActiveSection] = useState('explore');
+  const [selectedCampground, setSelectedCampground] = useState(null);
+  const [currentTrip, setCurrentTrip] = useState<any>(null);
+  const [tripWaypoints, setTripWaypoints] = useState<any[]>([]);
 
   const campgrounds = [
     {
@@ -102,16 +125,71 @@ const Campendium = () => {
     );
   };
 
-  return (
-    <div className="min-h-screen bg-background">
-      <Header />
+  const sidebarItems = [
+    { id: 'explore', label: 'Explore', icon: Compass },
+    { id: 'map', label: 'Map', icon: MapPin },
+    { id: 'itinerary', label: 'Itinerary', icon: Route },
+    { id: 'my-trips', label: 'My Trips', icon: Calendar },
+    { id: 'start-trip', label: 'Start Trip', icon: Plus }
+  ];
+
+  const startNewTrip = async () => {
+    try {
+      const newTrip = await createTrip({
+        title: "New Camping Trip",
+        start_location: "",
+        end_location: "",
+        travelers: 2,
+        status: 'draft'
+      });
       
-      {/* Main Content */}
-      <div className="flex h-[calc(100vh-4rem)]">
-        {/* Sidebar */}
-        <div className="w-96 bg-background border-r border-border overflow-y-auto">
-          {/* Search and Controls */}
-          <div className="p-4 space-y-4 border-b border-border">
+      setCurrentTrip(newTrip);
+      setActiveSection('itinerary');
+      toast({
+        title: "Trip Started!",
+        description: "Begin planning your camping adventure",
+      });
+    } catch (error) {
+      console.error('Error starting trip:', error);
+    }
+  };
+
+  const addStopToTrip = (campground: any) => {
+    if (!currentTrip) {
+      startNewTrip();
+      return;
+    }
+
+    const newWaypoint = {
+      name: campground.name,
+      description: campground.location,
+      coordinates: campground.coordinates,
+      stop_order: tripWaypoints.length,
+      waypoint_type: 'destination',
+      estimated_cost: campground.price
+    };
+
+    setTripWaypoints(prev => [...prev, newWaypoint]);
+    toast({
+      title: "Stop Added!",
+      description: `${campground.name} added to your trip`,
+    });
+  };
+
+  const filteredCampgrounds = campgrounds.filter(campground => {
+    const matchesSearch = campground.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         campground.location.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesSearch;
+  });
+
+  const renderSidebarContent = () => {
+    switch (activeSection) {
+      case 'explore':
+        return (
+          <div className="p-4 space-y-4">
+            <h2 className="text-lg font-semibold">Explore Campgrounds</h2>
+            
+            {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -121,7 +199,8 @@ const Campendium = () => {
                 className="pl-10"
               />
             </div>
-            
+
+            {/* View Controls */}
             <div className="flex items-center justify-between">
               <div className="flex gap-2">
                 <Button
@@ -141,135 +220,316 @@ const Campendium = () => {
                   List
                 </Button>
               </div>
-              
-              <Button variant="outline" size="sm">
-                <Filter className="h-4 w-4 mr-1" />
-                Filters
-              </Button>
             </div>
-          </div>
 
-          {/* Filters */}
-          <div className="p-4 border-b border-border">
-            <h3 className="font-semibold mb-3">Filters</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {filters.map((filter) => {
-                const Icon = filter.icon;
-                const isSelected = selectedFilters.includes(filter.value);
-                return (
-                  <Button
-                    key={filter.value}
-                    variant={isSelected ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => toggleFilter(filter.value)}
-                    className="justify-start h-auto p-2"
-                  >
-                    <Icon className="h-3 w-3 mr-1" />
-                    <span className="text-xs">{filter.label}</span>
-                  </Button>
-                );
-              })}
+            {/* Filters */}
+            <div>
+              <h3 className="font-semibold mb-3">Filters</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {filters.map((filter) => {
+                  const Icon = filter.icon;
+                  const isSelected = selectedFilters.includes(filter.value);
+                  return (
+                    <Button
+                      key={filter.value}
+                      variant={isSelected ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => toggleFilter(filter.value)}
+                      className="justify-start h-auto p-2"
+                    >
+                      <Icon className="h-3 w-3 mr-1" />
+                      <span className="text-xs">{filter.label}</span>
+                    </Button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
 
-          {/* Campground List */}
-          <div className="p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold">Campgrounds ({campgrounds.length})</h3>
-              <Button variant="ghost" size="sm">
-                <Settings className="h-4 w-4" />
-              </Button>
-            </div>
-            
-            {campgrounds.map((campground) => (
-              <Card key={campground.id} className="hover:shadow-md transition-shadow cursor-pointer">
-                <CardContent className="p-3">
-                  <div className="flex gap-3">
-                    <img
-                      src={campground.image}
-                      alt={campground.name}
-                      className="w-16 h-16 rounded-lg object-cover bg-muted"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h4 className="font-semibold text-sm truncate">{campground.name}</h4>
-                          <p className="text-xs text-muted-foreground">{campground.location}</p>
+            {/* Campground List */}
+            <div className="space-y-3">
+              <h3 className="font-semibold">Campgrounds ({filteredCampgrounds.length})</h3>
+              {filteredCampgrounds.map((campground) => (
+                <Card key={campground.id} className="hover:shadow-md transition-shadow cursor-pointer"
+                      onClick={() => setSelectedCampground(campground)}>
+                  <CardContent className="p-3">
+                    <div className="flex gap-3">
+                      <img
+                        src={campground.image}
+                        alt={campground.name}
+                        className="w-16 h-16 rounded-lg object-cover bg-muted"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h4 className="font-semibold text-sm truncate">{campground.name}</h4>
+                            <p className="text-xs text-muted-foreground">{campground.location}</p>
+                          </div>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="p-1 h-auto"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addStopToTrip(campground);
+                            }}
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
                         </div>
-                        <Button variant="ghost" size="sm" className="p-1 h-auto">
-                          <Heart className="h-3 w-3" />
-                        </Button>
-                      </div>
-                      
-                      <div className="flex items-center gap-1 my-1">
-                        <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                        <span className="text-xs font-medium">{campground.rating}</span>
-                        <span className="text-xs text-muted-foreground">({campground.reviews})</span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <Badge variant="secondary" className="text-xs">
-                          {campground.type}
-                        </Badge>
-                        <span className="text-sm font-semibold text-primary">{campground.price}</span>
-                      </div>
-                      
-                      <div className="flex gap-1 mt-1">
-                        {campground.amenities.slice(0, 3).map((amenity) => {
-                          const Icon = amenityIcons[amenity as keyof typeof amenityIcons];
-                          return Icon ? (
-                            <Icon key={amenity} className="h-3 w-3 text-muted-foreground" />
-                          ) : null;
-                        })}
-                        {campground.amenities.length > 3 && (
-                          <span className="text-xs text-muted-foreground">+{campground.amenities.length - 3}</span>
-                        )}
+                        
+                        <div className="flex items-center gap-1 my-1">
+                          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                          <span className="text-xs font-medium">{campground.rating}</span>
+                          <span className="text-xs text-muted-foreground">({campground.reviews})</span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <Badge variant="secondary" className="text-xs">
+                            {campground.type}
+                          </Badge>
+                          <span className="text-sm font-semibold text-primary">{campground.price}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </div>
-        </div>
+        );
 
-        {/* Map Area */}
-        <div className="flex-1 relative">
-          <InteractiveMap 
-            className="h-full"
-            showSearch={false}
-            initialCenter={[78.9629, 20.5937]}
-            initialZoom={5}
-            style="mapbox://styles/mapbox/outdoors-v12"
-          />
-          
-          {/* Map Overlay Controls */}
-          <div className="absolute bottom-4 left-4 right-4 z-10">
-            <Card className="bg-background/95 backdrop-blur p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
-                    <Phone className="h-4 w-4 mr-1" />
-                    Call
-                  </Button>
-                  <Button variant="outline" size="sm">
-                    <MapPin className="h-4 w-4 mr-1" />
-                    Directions
-                  </Button>
-                  <Button size="sm">
-                    Book Now
-                  </Button>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold">Rishikesh River Camp</p>
-                  <p className="text-xs text-muted-foreground">₹2,500/night</p>
+      case 'itinerary':
+        return (
+          <div className="p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Trip Itinerary</h2>
+              <Button size="sm" onClick={startNewTrip}>
+                <Plus className="h-4 w-4 mr-1" />
+                New Trip
+              </Button>
+            </div>
+
+            {currentTrip ? (
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">{currentTrip.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span>Waypoints:</span>
+                      <span>{tripWaypoints.length}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline">
+                        <Save className="h-4 w-4 mr-1" />
+                        Save
+                      </Button>
+                      <Button size="sm" variant="outline">
+                        <Share className="h-4 w-4 mr-1" />
+                        Share
+                      </Button>
+                      <Button size="sm" variant="outline">
+                        <Download className="h-4 w-4 mr-1" />
+                        Export
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div className="space-y-2">
+                  <h3 className="font-medium">Stops</h3>
+                  {tripWaypoints.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No stops added yet. Start exploring to add campgrounds!</p>
+                  ) : (
+                    tripWaypoints.map((waypoint, index) => (
+                      <Card key={index} className="p-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium text-sm">{waypoint.name}</p>
+                            <p className="text-xs text-muted-foreground">{waypoint.description}</p>
+                          </div>
+                          <Badge variant="secondary">{waypoint.estimated_cost}</Badge>
+                        </div>
+                      </Card>
+                    ))
+                  )}
                 </div>
               </div>
-            </Card>
+            ) : (
+              <div className="text-center py-8">
+                <Calendar className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground mb-4">No active trip</p>
+                <Button onClick={startNewTrip} className="gradient-hero text-white">
+                  Start Planning
+                </Button>
+              </div>
+            )}
+          </div>
+        );
+
+      case 'my-trips':
+        return (
+          <div className="p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">My Trips</h2>
+              <Button size="sm" onClick={() => navigate('/plan-trip')}>
+                <Plus className="h-4 w-4 mr-1" />
+                Plan New
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              {trips.length === 0 ? (
+                <div className="text-center py-8">
+                  <Route className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <p className="text-muted-foreground mb-4">No saved trips yet</p>
+                  <Button onClick={() => navigate('/plan-trip')} variant="outline">
+                    Create Your First Trip
+                  </Button>
+                </div>
+              ) : (
+                trips.map((trip) => (
+                  <Card key={trip.id} className="hover:shadow-md transition-shadow cursor-pointer">
+                    <CardContent className="p-3">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h4 className="font-semibold text-sm">{trip.title}</h4>
+                          <p className="text-xs text-muted-foreground">
+                            {trip.start_location} → {trip.end_location}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Created: {new Date(trip.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <Badge variant={trip.status === 'completed' ? 'default' : 'secondary'}>
+                          {trip.status}
+                        </Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+          </div>
+        );
+
+      default:
+        return (
+          <div className="p-4">
+            <h2 className="text-lg font-semibold mb-4">{activeSection}</h2>
+            <p className="text-muted-foreground">Content for {activeSection} section</p>
+          </div>
+        );
+    }
+  };
+
+  return (
+    <SidebarProvider>
+      <div className="min-h-screen bg-background w-full">
+        <Header />
+        
+        <div className="flex h-[calc(100vh-4rem)]">
+          {/* Enhanced Sidebar */}
+          <Sidebar className="w-80">
+            <SidebarContent>
+              <SidebarGroup>
+                <SidebarGroupLabel className="px-4 py-2">
+                  <div className="flex items-center justify-between w-full">
+                    <span>Campendium</span>
+                    <SidebarTrigger />
+                  </div>
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu className="px-2">
+                    {sidebarItems.map((item) => (
+                      <SidebarMenuItem key={item.id}>
+                        <SidebarMenuButton 
+                          asChild
+                          className={activeSection === item.id ? 'bg-primary/10 text-primary' : ''}
+                        >
+                          <button 
+                            onClick={() => {
+                              if (item.id === 'start-trip') {
+                                startNewTrip();
+                              } else {
+                                setActiveSection(item.id);
+                              }
+                            }}
+                            className="flex items-center w-full"
+                          >
+                            <item.icon className="h-4 w-4 mr-3" />
+                            {item.label}
+                          </button>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            </SidebarContent>
+          </Sidebar>
+
+          {/* Content Area */}
+          <div className="flex-1 flex">
+            {/* Dynamic Sidebar Content */}
+            <div className="w-96 bg-background border-r border-border overflow-y-auto">
+              {renderSidebarContent()}
+            </div>
+
+            {/* Map Area */}
+            <div className="flex-1 relative">
+              <InteractiveMap 
+                className="h-full"
+                showSearch={false}
+                initialCenter={[78.9629, 20.5937]}
+                initialZoom={5}
+                style="mapbox://styles/mapbox/outdoors-v12"
+              />
+              
+              {/* Map Overlay Controls */}
+              {selectedCampground && (
+                <div className="absolute bottom-4 left-4 right-4 z-10">
+                  <Card className="bg-background/95 backdrop-blur p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <h3 className="font-semibold">{selectedCampground.name}</h3>
+                        <p className="text-sm text-muted-foreground">{selectedCampground.location}</p>
+                        <div className="flex items-center gap-4 mt-2">
+                          <div className="flex items-center gap-1">
+                            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                            <span className="text-sm">{selectedCampground.rating}</span>
+                          </div>
+                          <span className="text-sm font-medium text-primary">{selectedCampground.price}</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm">
+                          <Phone className="h-4 w-4 mr-1" />
+                          Call
+                        </Button>
+                        <Button variant="outline" size="sm">
+                          <Navigation className="h-4 w-4 mr-1" />
+                          Directions
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          className="gradient-hero text-white"
+                          onClick={() => addStopToTrip(selectedCampground)}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Add to Trip
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </SidebarProvider>
   );
 };
 
