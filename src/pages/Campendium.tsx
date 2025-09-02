@@ -2,6 +2,12 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import InteractiveMap from "@/components/InteractiveMap";
+import RoutePlanner from "@/components/planner/RoutePlanner";
+import MapCanvas from "@/components/planner/MapCanvas";
+import DayByDay from "@/components/planner/DayByDay";
+import ShareButton from "@/components/planner/ShareButton";
+import ExportPdfButton from "@/components/planner/ExportPdfButton";
+import { useItineraryStore } from "@/store/itineraryStore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -51,8 +57,21 @@ const Campendium = () => {
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [activeSection, setActiveSection] = useState('explore');
   const [selectedCampground, setSelectedCampground] = useState(null);
-  const [currentTrip, setCurrentTrip] = useState<any>(null);
-  const [tripWaypoints, setTripWaypoints] = useState<any[]>([]);
+  
+  // Itinerary store
+  const {
+    currentItinerary,
+    filters,
+    updateWaypoints,
+    updateRouteData,
+    updateDays,
+    updateFilters,
+    saveItinerary,
+    createNewItinerary,
+    updateShareSettings
+  } = useItineraryStore();
+
+  const mapboxToken = 'pk.eyJ1Ijoic21va2V5IiwiYSI6ImNqa3d2N29pajAyMTkzcG1wZmczM2IwNDQifQ.NaHRdXWReFehBCY2l359Kg';
 
   const campgrounds = [
     {
@@ -430,8 +449,8 @@ const Campendium = () => {
         <Header />
         
         <div className="flex h-[calc(100vh-4rem)]">
-          {/* Enhanced Sidebar */}
-          <Sidebar className="w-80">
+          {/* Enhanced Sidebar - Smaller Width */}
+          <Sidebar className="w-64">
             <SidebarContent>
               <SidebarGroup>
                 <SidebarGroupLabel className="px-4 py-2">
