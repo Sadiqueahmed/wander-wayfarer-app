@@ -18,16 +18,20 @@ interface Itinerary {
 }
 
 interface ShareButtonProps {
-  itinerary: Itinerary;
+  itinerary: Itinerary | null;
   onShare?: (shareData: { isPublic: boolean; shareSlug?: string }) => Promise<void>;
 }
 
 const ShareButton: React.FC<ShareButtonProps> = ({ itinerary, onShare }) => {
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
-  const [isPublic, setIsPublic] = useState(itinerary.isPublic || false);
-  const [shareSlug, setShareSlug] = useState(itinerary.shareSlug || '');
+  const [isPublic, setIsPublic] = useState(itinerary?.isPublic || false);
+  const [shareSlug, setShareSlug] = useState(itinerary?.shareSlug || '');
   const [isSharing, setIsSharing] = useState(false);
+
+  if (!itinerary) {
+    return null;
+  }
 
   const generateSlug = () => {
     const slug = itinerary.title

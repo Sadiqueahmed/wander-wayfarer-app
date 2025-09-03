@@ -332,16 +332,20 @@ const Campendium = () => {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Route Planner</h2>
               <div className="flex gap-2">
-                <ShareButton 
-                  itinerary={currentItinerary}
-                  onShare={async (shareData) => {
-                    updateShareSettings(shareData.isPublic, shareData.shareSlug);
-                  }}
-                />
-                <ExportPdfButton 
-                  itinerary={currentItinerary}
-                  mapboxToken={mapboxToken}
-                />
+                {currentItinerary && (
+                  <ShareButton 
+                    itinerary={currentItinerary}
+                    onShare={async (shareData) => {
+                      updateShareSettings(shareData.isPublic, shareData.shareSlug);
+                    }}
+                  />
+                )}
+                {currentItinerary && (
+                  <ExportPdfButton 
+                    itinerary={currentItinerary}
+                    mapboxToken={mapboxToken}
+                  />
+                )}
               </div>
             </div>
             
@@ -370,16 +374,20 @@ const Campendium = () => {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Day-by-Day Itinerary</h2>
               <div className="flex gap-2">
-                <ShareButton 
-                  itinerary={currentItinerary}
-                  onShare={async (shareData) => {
-                    updateShareSettings(shareData.isPublic, shareData.shareSlug);
-                  }}
-                />
-                <ExportPdfButton 
-                  itinerary={currentItinerary}
-                  mapboxToken={mapboxToken}
-                />
+                {currentItinerary && (
+                  <ShareButton 
+                    itinerary={currentItinerary}
+                    onShare={async (shareData) => {
+                      updateShareSettings(shareData.isPublic, shareData.shareSlug);
+                    }}
+                  />
+                )}
+                {currentItinerary && (
+                  <ExportPdfButton 
+                    itinerary={currentItinerary}
+                    mapboxToken={mapboxToken}
+                  />
+                )}
               </div>
             </div>
 
