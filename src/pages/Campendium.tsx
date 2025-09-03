@@ -75,6 +75,13 @@ const Campendium = () => {
 
   const mapboxToken = 'pk.eyJ1Ijoic21va2V5IiwiYSI6ImNqa3d2N29pajAyMTkzcG1wZmczM2IwNDQifQ.NaHRdXWReFehBCY2l359Kg';
 
+  // Initialize new itinerary when route planner is accessed
+  useEffect(() => {
+    if (activeSection === 'route-planner' && !currentItinerary) {
+      createNewItinerary();
+    }
+  }, [activeSection, currentItinerary, createNewItinerary]);
+
   const campgrounds = [
     {
       id: 1,
@@ -148,9 +155,9 @@ const Campendium = () => {
 
   const sidebarItems = [
     { id: 'explore', label: 'Explore', icon: Compass },
-    { id: 'map', label: 'Map', icon: MapPin },
-    { id: 'itinerary', label: 'Itinerary', icon: Route },
-    { id: 'my-trips', label: 'My Trips', icon: Calendar },
+    { id: 'route-planner', label: 'Route Planner', icon: Route },
+    { id: 'itinerary', label: 'Itinerary', icon: Calendar },
+    { id: 'my-trips', label: 'My Trips', icon: List },
     { id: 'start-trip', label: 'Start Trip', icon: Plus }
   ];
 
@@ -319,70 +326,80 @@ const Campendium = () => {
           </div>
         );
 
+      case 'route-planner':
+        return (
+          <div className="p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Route Planner</h2>
+              <div className="flex gap-2">
+                <ShareButton 
+                  itinerary={currentItinerary}
+                  onShare={async (shareData) => {
+                    updateShareSettings(shareData.isPublic, shareData.shareSlug);
+                  }}
+                />
+                <ExportPdfButton 
+                  itinerary={currentItinerary}
+                  mapboxToken={mapboxToken}
+                />
+              </div>
+            </div>
+            
+            <RoutePlanner 
+              onRouteChange={(waypoints, routeData) => {
+                updateWaypoints(waypoints);
+                updateRouteData(routeData);
+              }}
+              mapboxToken={mapboxToken}
+            />
+            
+            <Button 
+              onClick={saveItinerary}
+              className="w-full gradient-hero text-white"
+              disabled={!currentItinerary?.waypoints?.length}
+            >
+              <Save className="h-4 w-4 mr-2" />
+              Save Route
+            </Button>
+          </div>
+        );
+
       case 'itinerary':
         return (
           <div className="p-4 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Trip Itinerary</h2>
-              <Button size="sm" onClick={startNewTrip}>
-                <Plus className="h-4 w-4 mr-1" />
-                New Trip
-              </Button>
+              <h2 className="text-lg font-semibold">Day-by-Day Itinerary</h2>
+              <div className="flex gap-2">
+                <ShareButton 
+                  itinerary={currentItinerary}
+                  onShare={async (shareData) => {
+                    updateShareSettings(shareData.isPublic, shareData.shareSlug);
+                  }}
+                />
+                <ExportPdfButton 
+                  itinerary={currentItinerary}
+                  mapboxToken={mapboxToken}
+                />
+              </div>
             </div>
 
-            {currentTrip ? (
-              <div className="space-y-4">
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">{currentTrip.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex justify-between text-sm">
-                      <span>Waypoints:</span>
-                      <span>{tripWaypoints.length}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline">
-                        <Save className="h-4 w-4 mr-1" />
-                        Save
-                      </Button>
-                      <Button size="sm" variant="outline">
-                        <Share className="h-4 w-4 mr-1" />
-                        Share
-                      </Button>
-                      <Button size="sm" variant="outline">
-                        <Download className="h-4 w-4 mr-1" />
-                        Export
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <div className="space-y-2">
-                  <h3 className="font-medium">Stops</h3>
-                  {tripWaypoints.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No stops added yet. Start exploring to add campgrounds!</p>
-                  ) : (
-                    tripWaypoints.map((waypoint, index) => (
-                      <Card key={index} className="p-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium text-sm">{waypoint.name}</p>
-                            <p className="text-xs text-muted-foreground">{waypoint.description}</p>
-                          </div>
-                          <Badge variant="secondary">{waypoint.estimated_cost}</Badge>
-                        </div>
-                      </Card>
-                    ))
-                  )}
-                </div>
-              </div>
+            {currentItinerary && currentItinerary.waypoints.length > 1 ? (
+              <DayByDay
+                waypoints={currentItinerary.waypoints}
+                routeData={currentItinerary.routeData}
+                onDaysChange={updateDays}
+              />
             ) : (
               <div className="text-center py-8">
                 <Calendar className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                <p className="text-muted-foreground mb-4">No active trip</p>
-                <Button onClick={startNewTrip} className="gradient-hero text-white">
-                  Start Planning
+                <p className="text-muted-foreground mb-4">
+                  No route planned yet. Create a route first to generate your itinerary.
+                </p>
+                <Button 
+                  onClick={() => setActiveSection('route-planner')} 
+                  className="gradient-hero text-white"
+                >
+                  Plan Route
                 </Button>
               </div>
             )}
@@ -452,7 +469,7 @@ const Campendium = () => {
         
         <div className="flex h-[calc(100vh-4rem)]">
           {/* Enhanced Sidebar - Smaller Width */}
-          <Sidebar className="w-64">
+          <Sidebar className="w-48">
             <SidebarContent>
               <SidebarGroup>
                 <SidebarGroupLabel className="px-4 py-2">
@@ -500,13 +517,30 @@ const Campendium = () => {
 
             {/* Map Area */}
             <div className="flex-1 relative">
-              <InteractiveMap 
-                className="h-full"
-                showSearch={false}
-                initialCenter={[78.9629, 20.5937]}
-                initialZoom={5}
-                style="mapbox://styles/mapbox/outdoors-v12"
-              />
+              {activeSection === 'route-planner' ? (
+                <MapCanvas
+                  waypoints={currentItinerary?.waypoints || []}
+                  routeData={currentItinerary?.routeData || {}}
+                  mapboxToken={mapboxToken}
+                  onWaypointDrag={(waypointId, lat, lng) => {
+                    const updatedWaypoints = (currentItinerary?.waypoints || []).map(wp =>
+                      wp.id === waypointId ? { ...wp, lat, lng } : wp
+                    );
+                    updateWaypoints(updatedWaypoints);
+                  }}
+                  showPOIs={true}
+                  poiFilters={storeFilters}
+                  className="h-full"
+                />
+              ) : (
+                <InteractiveMap 
+                  className="h-full"
+                  showSearch={false}
+                  initialCenter={[78.9629, 20.5937]}
+                  initialZoom={5}
+                  style="mapbox://styles/mapbox/outdoors-v12"
+                />
+              )}
               
               {/* Map Overlay Controls */}
               {selectedCampground && (
