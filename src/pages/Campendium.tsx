@@ -57,11 +57,13 @@ const Campendium = () => {
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [activeSection, setActiveSection] = useState('explore');
   const [selectedCampground, setSelectedCampground] = useState(null);
+  const [currentTrip, setCurrentTrip] = useState(null);
+  const [tripWaypoints, setTripWaypoints] = useState([]);
   
   // Itinerary store
   const {
     currentItinerary,
-    filters,
+    filters: storeFilters,
     updateWaypoints,
     updateRouteData,
     updateDays,
