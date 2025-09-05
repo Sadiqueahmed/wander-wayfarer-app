@@ -55,11 +55,11 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
   showControls = true,
   initialCenter = { lat: 20.5937, lng: 78.9629 }, // Center of India
   initialZoom = 4,
-  apiKey
+  apiKey = 'AIzaSyBbJbSHj4dI5igT0K5WPFISHYNJuVy48oE'
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
-  const [googleMapsApiKey, setGoogleMapsApiKey] = useState<string>(apiKey || '');
+  const [googleMapsApiKey, setGoogleMapsApiKey] = useState<string>(apiKey);
   const [searchQuery, setSearchQuery] = useState('');
   const [showTokenInput, setShowTokenInput] = useState(!apiKey);
   const [isMapLoaded, setIsMapLoaded] = useState(false);

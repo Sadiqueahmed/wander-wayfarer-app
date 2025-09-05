@@ -73,7 +73,7 @@ const Campendium = () => {
     updateShareSettings
   } = useItineraryStore();
 
-  const mapboxToken = 'pk.eyJ1Ijoic21va2V5IiwiYSI6ImNqa3d2N29pajAyMTkzcG1wZmczM2IwNDQifQ.NaHRdXWReFehBCY2l359Kg';
+  const mapboxToken = 'AIzaSyBbJbSHj4dI5igT0K5WPFISHYNJuVy48oE';
 
   // Initialize new itinerary when route planner is accessed
   useEffect(() => {
