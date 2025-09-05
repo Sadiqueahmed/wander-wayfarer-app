@@ -1,30 +1,40 @@
 import React, { useEffect, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
+import { Loader } from '@googlemaps/js-api-loader';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Search, MapPin, Navigation, Layers, Settings } from 'lucide-react';
 
-// Temporary Mapbox token input component
-const MapboxTokenInput = ({ onTokenSet }: { onTokenSet: (token: string) => void }) => {
-  // Auto-set the provided token
-  const providedToken = 'pk.eyJ1Ijoic21va2V5IiwiYSI6ImNqa3d2N29pajAyMTkzcG1wZmczM2IwNDQifQ.NaHRdXWReFehBCY2l359Kg';
+// Google Maps token input component
+const GoogleMapsTokenInput = ({ onTokenSet }: { onTokenSet: (token: string) => void }) => {
+  const [token, setToken] = useState('');
   
   const handleSetToken = () => {
-    onTokenSet(providedToken);
+    if (token.trim()) {
+      onTokenSet(token.trim());
+    }
   };
   
   return (
     <Card className="absolute top-4 left-4 right-4 z-10 p-4 bg-background/95 backdrop-blur">
-      <div className="space-y-2">
-        <h3 className="font-semibold">Mapbox Integration Ready</h3>
+      <div className="space-y-3">
+        <h3 className="font-semibold">Google Maps Integration</h3>
         <p className="text-sm text-muted-foreground">
-          Your Mapbox token is configured and ready to use
+          Enter your Google Maps API key to initialize the map
         </p>
-        <Button onClick={handleSetToken} className="w-full gradient-hero text-white">
+        <Input
+          type="text"
+          placeholder="Enter Google Maps API key..."
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          className="w-full"
+        />
+        <Button onClick={handleSetToken} className="w-full gradient-hero text-white" disabled={!token.trim()}>
           Initialize Map
         </Button>
+        <p className="text-xs text-muted-foreground">
+          Get your API key from the Google Cloud Console
+        </p>
       </div>
     </Card>
   );
@@ -34,94 +44,140 @@ interface InteractiveMapProps {
   className?: string;
   showSearch?: boolean;
   showControls?: boolean;
-  initialCenter?: [number, number];
+  initialCenter?: { lat: number; lng: number };
   initialZoom?: number;
-  style?: string;
+  apiKey?: string;
 }
 
 const InteractiveMap: React.FC<InteractiveMapProps> = ({
   className = "",
   showSearch = true,
   showControls = true,
-  initialCenter = [78.9629, 20.5937], // Center of India
+  initialCenter = { lat: 20.5937, lng: 78.9629 }, // Center of India
   initialZoom = 4,
-  style = 'mapbox://styles/mapbox/outdoors-v12'
+  apiKey
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
-  const [mapboxToken, setMapboxToken] = useState<string>('pk.eyJ1Ijoic21va2V5IiwiYSI6ImNqa3d2N29pajAyMTkzcG1wZmczM2IwNDQifQ.NaHRdXWReFehBCY2l359Kg');
+  const map = useRef<google.maps.Map | null>(null);
+  const [googleMapsApiKey, setGoogleMapsApiKey] = useState<string>(apiKey || '');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showTokenInput, setShowTokenInput] = useState(false);
+  const [showTokenInput, setShowTokenInput] = useState(!apiKey);
+  const [isMapLoaded, setIsMapLoaded] = useState(false);
+  const markers = useRef<google.maps.Marker[]>([]);
 
   // Sample POI data for India
   const samplePOIs = [
-    { name: "Taj Mahal", coordinates: [78.0421, 27.1751], type: "heritage" },
-    { name: "Gateway of India", coordinates: [72.8347, 18.9220], type: "landmark" },
-    { name: "Red Fort", coordinates: [77.2410, 28.6562], type: "heritage" },
-    { name: "Kaziranga National Park", coordinates: [93.3712, 26.5775], type: "nature" },
-    { name: "Shillong", coordinates: [91.8933, 25.5788], type: "hill-station" },
-    { name: "Tawang Monastery", coordinates: [91.8622, 27.5856], type: "religious" },
-    { name: "Majuli Island", coordinates: [94.2037, 27.0530], type: "nature" },
+    { name: "Taj Mahal", coordinates: { lat: 27.1751, lng: 78.0421 }, type: "heritage" },
+    { name: "Gateway of India", coordinates: { lat: 18.9220, lng: 72.8347 }, type: "landmark" },
+    { name: "Red Fort", coordinates: { lat: 28.6562, lng: 77.2410 }, type: "heritage" },
+    { name: "Kaziranga National Park", coordinates: { lat: 26.5775, lng: 93.3712 }, type: "nature" },
+    { name: "Shillong", coordinates: { lat: 25.5788, lng: 91.8933 }, type: "hill-station" },
+    { name: "Tawang Monastery", coordinates: { lat: 27.5856, lng: 91.8622 }, type: "religious" },
+    { name: "Majuli Island", coordinates: { lat: 27.0530, lng: 94.2037 }, type: "nature" },
   ];
 
   useEffect(() => {
-    if (!mapContainer.current || !mapboxToken) return;
+    if (!mapContainer.current || !googleMapsApiKey) return;
 
-    mapboxgl.accessToken = mapboxToken;
-    
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: style,
-      center: initialCenter,
-      zoom: initialZoom,
+    const loader = new Loader({
+      apiKey: googleMapsApiKey,
+      version: 'weekly',
+      libraries: ['places', 'geometry']
     });
 
-    // Add navigation controls
-    if (showControls) {
-      map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
-      map.current.addControl(new mapboxgl.FullscreenControl(), 'top-right');
-    }
+    loader.load().then(() => {
+      if (!mapContainer.current) return;
 
-    // Add POI markers
-    map.current.on('load', () => {
-      samplePOIs.forEach((poi) => {
-        const marker = new mapboxgl.Marker({
-          color: poi.type === 'nature' ? '#22c55e' : 
-                 poi.type === 'heritage' ? '#f59e0b' :
-                 poi.type === 'religious' ? '#8b5cf6' : '#3b82f6'
-        })
-          .setLngLat(poi.coordinates as [number, number])
-          .setPopup(new mapboxgl.Popup({ offset: 25 })
-            .setHTML(`
-              <div class="p-2">
-                <h3 class="font-semibold">${poi.name}</h3>
-                <p class="text-sm text-gray-600 capitalize">${poi.type.replace('-', ' ')}</p>
-              </div>
-            `))
-          .addTo(map.current!);
+      map.current = new google.maps.Map(mapContainer.current, {
+        center: initialCenter,
+        zoom: initialZoom,
+        mapTypeControl: showControls,
+        fullscreenControl: showControls,
+        streetViewControl: showControls,
+        zoomControl: showControls,
       });
+
+      // Add POI markers
+      samplePOIs.forEach((poi) => {
+        const marker = new google.maps.Marker({
+          position: poi.coordinates,
+          map: map.current!,
+          title: poi.name,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: poi.type === 'nature' ? '#22c55e' : 
+                      poi.type === 'heritage' ? '#f59e0b' :
+                      poi.type === 'religious' ? '#8b5cf6' : '#3b82f6',
+            fillOpacity: 1,
+            strokeColor: '#ffffff',
+            strokeWeight: 2
+          }
+        });
+
+        const infoWindow = new google.maps.InfoWindow({
+          content: `
+            <div class="p-2">
+              <h3 class="font-semibold">${poi.name}</h3>
+              <p class="text-sm text-gray-600 capitalize">${poi.type.replace('-', ' ')}</p>
+            </div>
+          `
+        });
+
+        marker.addListener('click', () => {
+          infoWindow.open(map.current!, marker);
+        });
+
+        markers.current.push(marker);
+      });
+
+      setIsMapLoaded(true);
+    }).catch((error) => {
+      console.error('Error loading Google Maps:', error);
     });
 
     return () => {
-      map.current?.remove();
+      markers.current.forEach(marker => marker.setMap(null));
+      markers.current = [];
     };
-  }, [mapboxToken, initialCenter, initialZoom, style, showControls]);
+  }, [googleMapsApiKey, initialCenter, initialZoom, showControls]);
 
   const handleTokenSet = (token: string) => {
-    setMapboxToken(token);
+    setGoogleMapsApiKey(token);
     setShowTokenInput(false);
   };
 
   const handleSearch = () => {
-    // Implement search functionality
-    console.log('Searching for:', searchQuery);
+    if (!searchQuery.trim() || !map.current) return;
+
+    const service = new google.maps.places.PlacesService(map.current);
+    const request = {
+      query: searchQuery,
+      fields: ['name', 'geometry']
+    };
+
+    service.textSearch(request, (results, status) => {
+      if (status === google.maps.places.PlacesServiceStatus.OK && results && results[0]) {
+        const place = results[0];
+        if (place.geometry?.location) {
+          map.current?.setCenter(place.geometry.location);
+          map.current?.setZoom(12);
+        }
+      }
+    });
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
   };
 
   return (
     <div className={`relative ${className}`}>
-      {showTokenInput && <MapboxTokenInput onTokenSet={handleTokenSet} />}
+      {showTokenInput && <GoogleMapsTokenInput onTokenSet={handleTokenSet} />}
       
-      {!showTokenInput && showSearch && (
+      {!showTokenInput && showSearch && isMapLoaded && (
         <Card className="absolute top-4 left-4 z-10 p-2 bg-background/95 backdrop-blur">
           <div className="flex gap-2">
             <Input
@@ -129,6 +185,7 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
               placeholder="Search destinations..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={handleKeyPress}
               className="w-64"
             />
             <Button onClick={handleSearch} size="sm">
@@ -138,7 +195,7 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
         </Card>
       )}
 
-      {!showTokenInput && (
+      {!showTokenInput && isMapLoaded && (
         <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
           <Button variant="outline" size="sm" className="bg-background/95 backdrop-blur">
             <Layers className="h-4 w-4" />
@@ -153,6 +210,15 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
       )}
 
       <div ref={mapContainer} className="w-full h-full rounded-lg" />
+      
+      {!isMapLoaded && !showTokenInput && (
+        <div className="absolute inset-0 bg-muted/50 backdrop-blur-sm rounded-lg flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+            <p className="text-sm text-muted-foreground">Loading map...</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

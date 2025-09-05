@@ -354,7 +354,7 @@ const Campendium = () => {
                 updateWaypoints(waypoints);
                 updateRouteData(routeData);
               }}
-              mapboxToken={mapboxToken}
+              googleMapsApiKey={mapboxToken}
             />
             
             <Button 
@@ -529,7 +529,7 @@ const Campendium = () => {
                 <MapCanvas
                   waypoints={currentItinerary?.waypoints || []}
                   routeData={currentItinerary?.routeData || {}}
-                  mapboxToken={mapboxToken}
+                  googleMapsApiKey={mapboxToken}
                   onWaypointDrag={(waypointId, lat, lng) => {
                     const updatedWaypoints = (currentItinerary?.waypoints || []).map(wp =>
                       wp.id === waypointId ? { ...wp, lat, lng } : wp
@@ -544,9 +544,8 @@ const Campendium = () => {
                 <InteractiveMap 
                   className="h-full"
                   showSearch={false}
-                  initialCenter={[78.9629, 20.5937]}
+                  initialCenter={{ lat: 20.5937, lng: 78.9629 }}
                   initialZoom={5}
-                  style="mapbox://styles/mapbox/outdoors-v12"
                 />
               )}
               

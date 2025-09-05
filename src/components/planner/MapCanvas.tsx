@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
+import { Loader } from '@googlemaps/js-api-loader';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -9,7 +8,7 @@ import { Star, Plus, Phone, Navigation, Fuel, Utensils } from 'lucide-react';
 interface POI {
   id: string;
   name: string;
-  coordinates: [number, number];
+  coordinates: { lat: number; lng: number };
   type: 'fuel' | 'food';
   rating?: number;
   address?: string;
@@ -29,13 +28,13 @@ interface RouteData {
   polyline?: any;
   distance?: number;
   duration?: number;
-  coordinates?: [number, number][];
+  coordinates?: { lat: number; lng: number }[];
 }
 
 interface MapCanvasProps {
   waypoints: Waypoint[];
   routeData: RouteData;
-  mapboxToken: string;
+  googleMapsApiKey: string;
   onWaypointDrag?: (waypointId: string, lat: number, lng: number) => void;
   onLocationSelect?: (location: { lat: number; lng: number; address: string }) => void;
   isPickerMode?: boolean;
@@ -47,7 +46,7 @@ interface MapCanvasProps {
 const MapCanvas: React.FC<MapCanvasProps> = ({
   waypoints,
   routeData,
-  mapboxToken,
+  googleMapsApiKey,
   onWaypointDrag,
   onLocationSelect,
   isPickerMode = false,
@@ -56,8 +55,10 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
   poiFilters = { fuel: false, food: false }
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
-  const markers = useRef<mapboxgl.Marker[]>([]);
+  const map = useRef<google.maps.Map | null>(null);
+  const markers = useRef<google.maps.Marker[]>([]);
+  const directionsService = useRef<google.maps.DirectionsService | null>(null);
+  const directionsRenderer = useRef<google.maps.DirectionsRenderer | null>(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [selectedPOI, setSelectedPOI] = useState<POI | null>(null);
   const [pois, setPois] = useState<POI[]>([]);
@@ -67,7 +68,7 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
     {
       id: 'fuel-1',
       name: 'Indian Oil Petrol Pump',
-      coordinates: [77.2090, 28.6139],
+      coordinates: { lat: 28.6139, lng: 77.2090 },
       type: 'fuel',
       rating: 4.2,
       address: 'Connaught Place, New Delhi',
@@ -76,7 +77,7 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
     {
       id: 'food-1',
       name: 'Karim\'s Restaurant',
-      coordinates: [77.2315, 28.6562],
+      coordinates: { lat: 28.6562, lng: 77.2315 },
       type: 'food',
       rating: 4.5,
       address: 'Jama Masjid, Old Delhi',
@@ -85,7 +86,7 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
     {
       id: 'fuel-2',
       name: 'HP Petrol Pump',
-      coordinates: [78.0322, 30.3165],
+      coordinates: { lat: 30.3165, lng: 78.0322 },
       type: 'fuel',
       rating: 4.0,
       address: 'Dehradun, Uttarakhand'
@@ -93,144 +94,135 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
     {
       id: 'food-2',
       name: 'Garhwal Mandal Vikas',
-      coordinates: [78.0322, 30.3165],
+      coordinates: { lat: 30.3165, lng: 78.0322 },
       type: 'food',
       rating: 4.3,
       address: 'ISBT, Dehradun'
     }
   ];
 
-  const handleMapClick = useCallback(async (e: any) => {
-    if (!isPickerMode || !onLocationSelect) return;
+  const handleMapClick = useCallback(async (e: google.maps.MapMouseEvent) => {
+    if (!isPickerMode || !onLocationSelect || !e.latLng) return;
 
-    const { lng, lat } = e.lngLat;
+    const lat = e.latLng.lat();
+    const lng = e.latLng.lng();
+    
+    const geocoder = new google.maps.Geocoder();
     
     try {
-      const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxToken}`
-      );
-      const data = await response.json();
-      const address = data.features[0]?.place_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      const result = await geocoder.geocode({ location: { lat, lng } });
+      const address = result.results[0]?.formatted_address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
       
       onLocationSelect({ lat, lng, address });
     } catch (error) {
       console.error('Geocoding failed:', error);
       onLocationSelect({ lat, lng, address: `${lat.toFixed(4)}, ${lng.toFixed(4)}` });
     }
-  }, [isPickerMode, onLocationSelect, mapboxToken]);
+  }, [isPickerMode, onLocationSelect]);
 
   // Initialize map
   useEffect(() => {
-    if (!mapContainer.current || !mapboxToken) return;
+    if (!mapContainer.current || !googleMapsApiKey) return;
 
-    mapboxgl.accessToken = mapboxToken;
-    
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/outdoors-v12',
-      center: [78.9629, 20.5937],
-      zoom: 5,
+    const loader = new Loader({
+      apiKey: googleMapsApiKey,
+      version: 'weekly',
+      libraries: ['places', 'geometry']
     });
 
-    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
-    map.current.addControl(new mapboxgl.FullscreenControl(), 'top-right');
+    loader.load().then(() => {
+      if (!mapContainer.current) return;
 
-    map.current.on('load', () => {
+      map.current = new google.maps.Map(mapContainer.current, {
+        center: { lat: 20.5937, lng: 78.9629 },
+        zoom: 5,
+        mapTypeControl: true,
+        fullscreenControl: true,
+        streetViewControl: true,
+        zoomControl: true,
+      });
+
+      directionsService.current = new google.maps.DirectionsService();
+      directionsRenderer.current = new google.maps.DirectionsRenderer({
+        draggable: !isPickerMode,
+        polylineOptions: {
+          strokeColor: '#ff6b35',
+          strokeWeight: 4,
+          strokeOpacity: 0.8
+        }
+      });
+
+      directionsRenderer.current.setMap(map.current);
+
+      if (isPickerMode && onLocationSelect) {
+        map.current.addListener('click', handleMapClick);
+      }
+
       setIsMapLoaded(true);
-      
-      // Add route source
-      map.current!.addSource('route', {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          properties: {},
-          geometry: {
-            type: 'LineString',
-            coordinates: []
-          }
-        }
-      });
-
-      // Add route layer
-      map.current!.addLayer({
-        id: 'route',
-        type: 'line',
-        source: 'route',
-        layout: {
-          'line-join': 'round',
-          'line-cap': 'round'
-        },
-        paint: {
-          'line-color': '#ff6b35',
-          'line-width': 4,
-          'line-opacity': 0.8
-        }
-      });
+      setPois(samplePOIs);
+    }).catch((error) => {
+      console.error('Error loading Google Maps:', error);
     });
-
-    if (isPickerMode && onLocationSelect) {
-      map.current.on('click', handleMapClick);
-    }
-
-    setPois(samplePOIs);
 
     return () => {
-      map.current?.remove();
+      markers.current.forEach(marker => marker.setMap(null));
+      markers.current = [];
     };
-  }, [mapboxToken, isPickerMode, handleMapClick]);
+  }, [googleMapsApiKey, isPickerMode, handleMapClick]);
 
   // Update markers when waypoints change
   useEffect(() => {
     if (!map.current || !isMapLoaded) return;
 
     // Clear existing markers
-    markers.current.forEach(marker => marker.remove());
+    markers.current.forEach(marker => marker.setMap(null));
     markers.current = [];
 
     // Add new markers
     waypoints.forEach((waypoint, index) => {
       if (waypoint.lat === 0 && waypoint.lng === 0) return;
 
-      const el = document.createElement('div');
-      el.className = 'waypoint-marker';
-      el.style.cssText = `
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-weight: bold;
-        font-size: 12px;
-        cursor: pointer;
-        border: 2px solid white;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        background-color: ${waypoint.type === 'start' ? '#22c55e' : waypoint.type === 'end' ? '#ef4444' : '#3b82f6'};
-      `;
-      el.textContent = waypoint.type === 'start' ? 'S' : waypoint.type === 'end' ? 'E' : String.fromCharCode(65 + index - 1);
+      const marker = new google.maps.Marker({
+        position: { lat: waypoint.lat, lng: waypoint.lng },
+        map: map.current!,
+        title: waypoint.name || waypoint.type,
+        draggable: !!onWaypointDrag && !isPickerMode,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 16,
+          fillColor: waypoint.type === 'start' ? '#22c55e' : waypoint.type === 'end' ? '#ef4444' : '#3b82f6',
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 2
+        },
+        label: {
+          text: waypoint.type === 'start' ? 'S' : waypoint.type === 'end' ? 'E' : String.fromCharCode(65 + index - 1),
+          color: '#ffffff',
+          fontSize: '12px',
+          fontWeight: 'bold'
+        }
+      });
 
-      const marker = new mapboxgl.Marker({
-        element: el,
-        draggable: !!onWaypointDrag && !isPickerMode
-      })
-        .setLngLat([waypoint.lng, waypoint.lat])
-        .setPopup(
-          new mapboxgl.Popup({ offset: 25 })
-            .setHTML(`
-              <div class="p-2">
-                <h3 class="font-semibold">${waypoint.name || waypoint.type}</h3>
-                <p class="text-sm text-gray-600">${waypoint.address || waypoint.type}</p>
-              </div>
-            `)
-        )
-        .addTo(map.current!);
+      const infoWindow = new google.maps.InfoWindow({
+        content: `
+          <div class="p-2">
+            <h3 class="font-semibold">${waypoint.name || waypoint.type}</h3>
+            <p class="text-sm text-gray-600">${waypoint.address || waypoint.type}</p>
+          </div>
+        `
+      });
+
+      marker.addListener('click', () => {
+        infoWindow.open(map.current!, marker);
+      });
 
       // Add drag handler
       if (onWaypointDrag && !isPickerMode) {
-        marker.on('dragend', () => {
-          const lngLat = marker.getLngLat();
-          onWaypointDrag(waypoint.id, lngLat.lat, lngLat.lng);
+        marker.addListener('dragend', () => {
+          const position = marker.getPosition();
+          if (position) {
+            onWaypointDrag(waypoint.id, position.lat(), position.lng());
+          }
         });
       }
 
@@ -240,36 +232,34 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
     // Fit map to markers if there are valid waypoints
     const validWaypoints = waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0);
     if (validWaypoints.length > 0 && !isPickerMode) {
-      const bounds = new mapboxgl.LngLatBounds();
-      validWaypoints.forEach(wp => bounds.extend([wp.lng, wp.lat]));
+      const bounds = new google.maps.LatLngBounds();
+      validWaypoints.forEach(wp => bounds.extend({ lat: wp.lat, lng: wp.lng }));
       
-      map.current.fitBounds(bounds, {
-        padding: 50,
-        maxZoom: 12
-      });
+      map.current.fitBounds(bounds);
     }
   }, [waypoints, isMapLoaded, onWaypointDrag, isPickerMode]);
 
-  // Update route polyline
+  // Update route when routeData changes
   useEffect(() => {
-    if (!map.current || !isMapLoaded) return;
+    if (!map.current || !isMapLoaded || !directionsRenderer.current || !directionsService.current) return;
 
-    if (routeData.coordinates && routeData.coordinates.length > 0) {
-      const source = map.current.getSource('route') as mapboxgl.GeoJSONSource;
-      source?.setData({
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'LineString',
-          coordinates: routeData.coordinates
+    if (routeData.coordinates && routeData.coordinates.length > 1) {
+      const waypoints = routeData.coordinates.slice(1, -1).map(coord => ({
+        location: coord,
+        stopover: true
+      }));
+
+      const request: google.maps.DirectionsRequest = {
+        origin: routeData.coordinates[0],
+        destination: routeData.coordinates[routeData.coordinates.length - 1],
+        waypoints: waypoints,
+        travelMode: google.maps.TravelMode.DRIVING
+      };
+
+      directionsService.current.route(request, (result, status) => {
+        if (status === google.maps.DirectionsStatus.OK && result) {
+          directionsRenderer.current?.setDirections(result);
         }
-      });
-    } else if (routeData.polyline) {
-      const source = map.current.getSource('route') as mapboxgl.GeoJSONSource;
-      source?.setData({
-        type: 'Feature',
-        properties: {},
-        geometry: routeData.polyline
       });
     }
   }, [routeData, isMapLoaded]);
@@ -289,32 +279,21 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
     );
 
     filteredPOIs.forEach(poi => {
-      const el = document.createElement('div');
-      el.className = 'poi-marker';
-      el.style.cssText = `
-        width: 24px;
-        height: 24px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-size: 12px;
-        cursor: pointer;
-        background-color: ${poi.type === 'fuel' ? '#f59e0b' : '#10b981'};
-        border: 2px solid white;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-      `;
-      
-      const icon = document.createElement('div');
-      icon.innerHTML = poi.type === 'fuel' ? '⛽' : '🍽️';
-      el.appendChild(icon);
+      const marker = new google.maps.Marker({
+        position: poi.coordinates,
+        map: map.current!,
+        title: poi.name,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 12,
+          fillColor: poi.type === 'fuel' ? '#f59e0b' : '#10b981',
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 2
+        }
+      });
 
-      el.addEventListener('click', () => setSelectedPOI(poi));
-
-      new mapboxgl.Marker({ element: el })
-        .setLngLat(poi.coordinates)
-        .addTo(map.current!);
+      marker.addListener('click', () => setSelectedPOI(poi));
     });
   }, [showPOIs, poiFilters, pois, isMapLoaded]);
 

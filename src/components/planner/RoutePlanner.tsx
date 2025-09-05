@@ -37,10 +37,10 @@ interface RouteData {
 
 interface RoutePlannerProps {
   onRouteChange: (waypoints: Waypoint[], routeData: RouteData) => void;
-  mapboxToken: string;
+  googleMapsApiKey: string;
 }
 
-const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, mapboxToken }) => {
+const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsApiKey }) => {
   const { toast } = useToast();
   const [waypoints, setWaypoints] = useState<Waypoint[]>([
     { id: 'start', name: '', lat: 0, lng: 0, type: 'start' },
@@ -73,17 +73,18 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, mapboxToken 
 
     try {
       const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${mapboxToken}&limit=1`
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${googleMapsApiKey}`
       );
       const data = await response.json();
       
-      if (data.features && data.features.length > 0) {
-        const feature = data.features[0];
-        const [lng, lat] = feature.center;
+      if (data.results && data.results.length > 0) {
+        const result = data.results[0];
+        const lat = result.geometry.location.lat;
+        const lng = result.geometry.location.lng;
         
         setWaypoints(prev => prev.map(wp => 
           wp.id === waypointId 
-            ? { ...wp, lat, lng, address: feature.place_name, placeId: feature.id }
+            ? { ...wp, lat, lng, address: result.formatted_address, placeId: result.place_id }
             : wp
         ));
       }
@@ -110,7 +111,7 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, mapboxToken 
       coordinates += `;${end.lng},${end.lat}`;
 
       const response = await fetch(
-        `https://api.mapbox.com/directions/v5/mapbox/driving/${coordinates}?access_token=${mapboxToken}&geometries=geojson&steps=true&overview=full`
+        `https://maps.googleapis.com/maps/api/directions/json?origin=${start.lat},${start.lng}&destination=${end.lat},${end.lng}&key=${googleMapsApiKey}`
       );
       const data = await response.json();
 
@@ -454,11 +455,11 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, mapboxToken 
 
       {/* Map Picker Modal */}
       {showMapPicker && (
-        <MapPickerModal
-          open={showMapPicker}
-          onClose={() => setShowMapPicker(false)}
-          onSelect={handleMapPickerSelect}
-          mapboxToken={mapboxToken}
+          <MapPickerModal
+            open={showMapPicker}
+            onClose={() => setShowMapPicker(false)}
+            onSelect={handleMapPickerSelect}
+            googleMapsApiKey={googleMapsApiKey}
         />
       )}
     </div>

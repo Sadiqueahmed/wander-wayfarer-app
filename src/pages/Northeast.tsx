@@ -152,9 +152,8 @@ const Northeast = () => {
           <div className="bg-background rounded-xl shadow-lg overflow-hidden">
             <InteractiveMap 
               className="h-96"
-              initialCenter={[92.9376, 26.2006]}
+              initialCenter={{ lat: 26.2006, lng: 92.9376 }}
               initialZoom={6.5}
-              style="mapbox://styles/mapbox/satellite-streets-v12"
             />
           </div>
         </div>

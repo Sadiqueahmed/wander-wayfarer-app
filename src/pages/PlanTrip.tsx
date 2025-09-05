@@ -415,7 +415,7 @@ const PlanTrip = () => {
                         className="h-full"
                         showSearch={true}
                         showControls={true}
-                        initialCenter={[78.9629, 20.5937]}
+                        initialCenter={{ lat: 20.5937, lng: 78.9629 }}
                         initialZoom={5}
                       />
                     </div>
