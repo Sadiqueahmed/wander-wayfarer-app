@@ -47,6 +47,18 @@ interface InteractiveMapProps {
   initialCenter?: { lat: number; lng: number };
   initialZoom?: number;
   apiKey?: string;
+  waypoints?: Array<{
+    id: string;
+    name: string;
+    lat: number;
+    lng: number;
+    type: 'start' | 'end' | 'waypoint';
+  }>;
+  routeData?: {
+    distance?: number;
+    duration?: number;
+    steps?: any[];
+  };
 }
 
 const InteractiveMap: React.FC<InteractiveMapProps> = ({
@@ -55,7 +67,9 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
   showControls = true,
   initialCenter = { lat: 20.5937, lng: 78.9629 }, // Center of India
   initialZoom = 4,
-  apiKey = 'AIzaSyBbJbSHj4dI5igT0K5WPFISHYNJuVy48oE'
+  apiKey = 'AIzaSyBbJbSHj4dI5igT0K5WPFISHYNJuVy48oE',
+  waypoints = [],
+  routeData
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
@@ -63,7 +77,8 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [showTokenInput, setShowTokenInput] = useState(!apiKey);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
-  const markers = useRef<google.maps.Marker[]>([]);
+  const waypointMarkers = useRef<google.maps.Marker[]>([]);
+  const poiMarkers = useRef<google.maps.Marker[]>([]);
 
   // Sample POI data for India
   const samplePOIs = [
@@ -128,19 +143,86 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
           infoWindow.open(map.current!, marker);
         });
 
-        markers.current.push(marker);
+        poiMarkers.current.push(marker);
       });
 
       setIsMapLoaded(true);
+      
+      // Initialize waypoints if provided
+      updateWaypointMarkers();
     }).catch((error) => {
       console.error('Error loading Google Maps:', error);
     });
 
     return () => {
-      markers.current.forEach(marker => marker.setMap(null));
-      markers.current = [];
+      poiMarkers.current.forEach(marker => marker.setMap(null));
+      poiMarkers.current = [];
+      waypointMarkers.current.forEach(marker => marker.setMap(null));
+      waypointMarkers.current = [];
     };
   }, [googleMapsApiKey, initialCenter, initialZoom, showControls]);
+
+  const updateWaypointMarkers = () => {
+    if (!map.current || !isMapLoaded) return;
+
+    // Clear existing waypoint markers
+    waypointMarkers.current.forEach(marker => marker.setMap(null));
+    waypointMarkers.current = [];
+
+    // Add waypoint markers
+    waypoints.forEach((waypoint) => {
+      if (waypoint.lat !== 0 && waypoint.lng !== 0) {
+        const marker = new google.maps.Marker({
+          position: { lat: waypoint.lat, lng: waypoint.lng },
+          map: map.current,
+          title: waypoint.name,
+          icon: {
+            url: waypoint.type === 'start' ? 'https://maps.google.com/mapfiles/ms/icons/green-dot.png' :
+                 waypoint.type === 'end' ? 'https://maps.google.com/mapfiles/ms/icons/red-dot.png' :
+                 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+            scaledSize: new google.maps.Size(32, 32)
+          }
+        });
+
+        const infoWindow = new google.maps.InfoWindow({
+          content: `<div style="padding: 8px;">
+            <h3 style="margin: 0 0 4px 0; font-size: 14px; font-weight: bold;">${waypoint.name}</h3>
+            <p style="margin: 0; font-size: 12px; color: #666;">${waypoint.type.charAt(0).toUpperCase() + waypoint.type.slice(1)} point</p>
+          </div>`
+        });
+
+        marker.addListener('click', () => {
+          infoWindow.open(map.current, marker);
+        });
+
+        waypointMarkers.current.push(marker);
+      }
+    });
+
+    // Fit map to show all waypoints if they exist
+    if (waypoints.length > 0) {
+      const validWaypoints = waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0);
+      if (validWaypoints.length > 0) {
+        const bounds = new google.maps.LatLngBounds();
+        validWaypoints.forEach(waypoint => {
+          bounds.extend({ lat: waypoint.lat, lng: waypoint.lng });
+        });
+        
+        map.current.fitBounds(bounds);
+        // Set a max zoom level to avoid zooming in too much for close waypoints
+        google.maps.event.addListenerOnce(map.current, 'bounds_changed', () => {
+          if (map.current && map.current.getZoom()! > 15) {
+            map.current.setZoom(15);
+          }
+        });
+      }
+    }
+  };
+
+  // Update waypoint markers when waypoints change
+  useEffect(() => {
+    updateWaypointMarkers();
+  }, [waypoints, isMapLoaded]);
 
   const handleTokenSet = (token: string) => {
     setGoogleMapsApiKey(token);

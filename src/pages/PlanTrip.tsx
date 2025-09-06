@@ -1,13 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import RoutePlanner from "@/components/planner/RoutePlanner";
+import DayByDay from "@/components/planner/DayByDay";
 import InteractiveMap from "@/components/InteractiveMap";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useTrips } from "@/hooks/useTrips";
+import { useItineraryStore } from "@/store/itineraryStore";
+import { supabase } from "@/integrations/supabase/client";
 import { 
   MapPin, 
   Plus, 
@@ -28,13 +35,39 @@ import {
   Route,
   Users,
   Heart,
-  Star
+  Star,
+  FolderOpen,
+  Play,
+  Loader2
 } from "lucide-react";
+
+interface Waypoint {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  type: 'start' | 'end' | 'waypoint';
+}
+
+interface RouteData {
+  distance?: number;
+  duration?: number;
+  steps?: any[];
+}
 
 const PlanTrip = () => {
   const { toast } = useToast();
+  const { createTrip, updateTrip, trips, loading: tripsLoading } = useTrips();
+  const { currentItinerary, updateWaypoints, saveItinerary } = useItineraryStore();
+  
+  const [user, setUser] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+  const [currentTripId, setCurrentTripId] = useState<string | null>(null);
+  const [showLoadDialog, setShowLoadDialog] = useState(false);
+  
   const [tripData, setTripData] = useState({
     title: "My India Adventure",
+    description: "",
     startLocation: "",
     endLocation: "",
     startDate: "",
@@ -47,36 +80,177 @@ const PlanTrip = () => {
     fuelPrice: 110
   });
 
-  const [waypoints, setWaypoints] = useState([
-    { id: 1, name: "Red Fort, Delhi", time: "2 hours", cost: "₹30" },
-    { id: 2, name: "Kaziranga National Park", time: "1 day", cost: "₹1,500" },
-    { id: 3, name: "Shillong Peak", time: "3 hours", cost: "Free" }
-  ]);
+  const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
+  const [routeData, setRouteData] = useState<RouteData>({});
+  const [dayPlans, setDayPlans] = useState<any[]>([]);
+  
+  const googleMapsApiKey = 'AIzaSyBbJbSHj4dI5igT0K5WPFISHYNJuVy48oE';
 
-  const addWaypoint = () => {
-    const newWaypoint = {
-      id: waypoints.length + 1,
-      name: "",
-      time: "",
-      cost: ""
+  // Check authentication status
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
     };
-    setWaypoints([...waypoints, newWaypoint]);
-  };
+    getUser();
+  }, []);
 
-  const removeWaypoint = (id: number) => {
-    setWaypoints(waypoints.filter(wp => wp.id !== id));
+  const handleRouteChange = (newWaypoints: Waypoint[], newRouteData: RouteData) => {
+    setWaypoints(newWaypoints);
+    setRouteData(newRouteData);
+    updateWaypoints(newWaypoints.map(wp => ({
+      id: wp.id,
+      name: wp.name,
+      lat: wp.lat,
+      lng: wp.lng,
+      type: wp.type,
+      order: 0
+    })));
   };
 
   const calculateFuelCost = () => {
-    const totalDistance = 2847; // This would be calculated from route
+    const totalDistance = routeData.distance || 0;
     const fuelNeeded = totalDistance / tripData.mileage;
     return Math.round(fuelNeeded * tripData.fuelPrice);
   };
 
-  const saveTrip = () => {
+  const saveTrip = async () => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to save your trip",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const tripToSave = {
+        title: tripData.title,
+        description: tripData.description,
+        start_location: tripData.startLocation,
+        end_location: tripData.endLocation,
+        start_date: tripData.startDate || null,
+        end_date: tripData.endDate || null,
+        travelers: tripData.travelers,
+        budget: tripData.budget,
+        vehicle_type: tripData.vehicleType,
+        fuel_type: tripData.fuelType,
+        mileage: tripData.mileage,
+        fuel_price: tripData.fuelPrice,
+        total_distance: routeData.distance,
+        estimated_fuel_cost: calculateFuelCost(),
+        status: 'draft',
+        is_public: false,
+        trip_data: {
+          waypoints: waypoints,
+          routeData: routeData,
+          dayPlans: dayPlans
+        }
+      };
+
+      let savedTrip;
+      if (currentTripId) {
+        savedTrip = await updateTrip(currentTripId, tripToSave);
+      } else {
+        savedTrip = await createTrip(tripToSave);
+        setCurrentTripId(savedTrip.id);
+      }
+      
+      // Update current itinerary in store if needed
+      const { setCurrentItinerary } = useItineraryStore.getState();
+      setCurrentItinerary({
+        id: savedTrip.id,
+        title: tripData.title,
+        waypoints: waypoints.map(wp => ({
+          id: wp.id,
+          name: wp.name,
+          lat: wp.lat,
+          lng: wp.lng,
+          type: wp.type,
+          order: 0
+        })),
+        days: dayPlans || [],
+        routeData: routeData,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isPublic: false
+      });
+      
+      // Save to store
+      saveItinerary();
+
+      toast({
+        title: "Trip Saved!",
+        description: "Your trip has been saved successfully.",
+      });
+    } catch (error) {
+      console.error('Error saving trip:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const loadTrip = (trip: any) => {
+    setTripData({
+      title: trip.title,
+      description: trip.description || "",
+      startLocation: trip.start_location,
+      endLocation: trip.end_location,
+      startDate: trip.start_date || "",
+      endDate: trip.end_date || "",
+      travelers: trip.travelers,
+      budget: trip.budget || 50000,
+      vehicleType: trip.vehicle_type || "car",
+      fuelType: trip.fuel_type || "petrol",
+      mileage: trip.mileage || 15,
+      fuelPrice: trip.fuel_price || 110
+    });
+
+    if (trip.trip_data) {
+      if (trip.trip_data.waypoints) {
+        setWaypoints(trip.trip_data.waypoints);
+      }
+      if (trip.trip_data.routeData) {
+        setRouteData(trip.trip_data.routeData);
+      }
+      if (trip.trip_data.dayPlans) {
+        setDayPlans(trip.trip_data.dayPlans);
+      }
+    }
+
+    setCurrentTripId(trip.id);
+    setShowLoadDialog(false);
+    
     toast({
-      title: "Trip Saved!",
-      description: "Your trip has been saved successfully.",
+      title: "Trip Loaded",
+      description: `${trip.title} has been loaded successfully.`,
+    });
+  };
+
+  const startNewTrip = () => {
+    setTripData({
+      title: "My India Adventure",
+      description: "",
+      startLocation: "",
+      endLocation: "",
+      startDate: "",
+      endDate: "",
+      travelers: 2,
+      budget: 50000,
+      vehicleType: "car",
+      fuelType: "petrol",
+      mileage: 15,
+      fuelPrice: 110
+    });
+    setWaypoints([]);
+    setRouteData({});
+    setDayPlans([]);
+    setCurrentTripId(null);
+    toast({
+      title: "New Trip Started",
+      description: "Ready to plan your new adventure!",
     });
   };
 
@@ -111,9 +285,11 @@ const PlanTrip = () => {
   };
 
   const generateAIItinerary = () => {
+    // This could integrate with an AI service to optimize the route
+    // For now, we'll just show a placeholder message
     toast({
-      title: "AI Itinerary Generated!",
-      description: "Smart recommendations have been added to your trip.",
+      title: "AI Optimization Coming Soon!",
+      description: "Smart route optimization will be available soon.",
     });
   };
 
@@ -125,6 +301,77 @@ const PlanTrip = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Panel - Trip Settings */}
           <div className="lg:col-span-1 space-y-6">
+            {/* Trip Management */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <FolderOpen className="h-5 w-5 mr-2" />
+                  Trip Management
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button 
+                  onClick={startNewTrip}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Trip
+                </Button>
+                
+                <Dialog open={showLoadDialog} onOpenChange={setShowLoadDialog}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="w-full">
+                      <FolderOpen className="h-4 w-4 mr-2" />
+                      Load Saved Trip
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Load Saved Trip</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {tripsLoading ? (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="h-6 w-6 animate-spin" />
+                        </div>
+                      ) : trips.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-4">
+                          No saved trips found
+                        </p>
+                      ) : (
+                        trips.map((trip) => (
+                          <Card key={trip.id} className="cursor-pointer hover:border-primary/20 transition-colors">
+                            <CardContent className="p-4" onClick={() => loadTrip(trip)}>
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <h4 className="font-medium">{trip.title}</h4>
+                                  <p className="text-sm text-muted-foreground">
+                                    {trip.start_location} → {trip.end_location}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Date(trip.created_at).toLocaleDateString()}
+                                  </p>
+                                </div>
+                                <Badge variant={trip.status === 'completed' ? 'default' : 'secondary'}>
+                                  {trip.status}
+                                </Badge>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))
+                      )}
+                    </div>
+                  </DialogContent>
+                </Dialog>
+                
+                {currentTripId && (
+                  <div className="text-xs text-center text-muted-foreground">
+                    Current trip ID: {currentTripId.slice(0, 8)}...
+                  </div>
+                )}
+              </CardContent>
+            </Card>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -139,6 +386,15 @@ const PlanTrip = () => {
                     value={tripData.title}
                     onChange={(e) => setTripData({...tripData, title: e.target.value})}
                     placeholder="My Amazing Trip"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Description</label>
+                  <Input
+                    value={tripData.description}
+                    onChange={(e) => setTripData({...tripData, description: e.target.value})}
+                    placeholder="Brief description of your trip"
                   />
                 </div>
 
@@ -171,18 +427,31 @@ const PlanTrip = () => {
                   />
                 </div>
 
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Vehicle Type</label>
-                  <select
-                    value={tripData.vehicleType}
-                    onChange={(e) => setTripData({...tripData, vehicleType: e.target.value})}
-                    className="w-full h-10 rounded-md border border-input bg-background px-3 py-2"
-                  >
-                    <option value="car">Car</option>
-                    <option value="bike">Motorcycle</option>
-                    <option value="bus">Bus</option>
-                    <option value="train">Train</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Travelers</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={tripData.travelers}
+                      onChange={(e) => setTripData({...tripData, travelers: Number(e.target.value)})}
+                      placeholder="2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Vehicle Type</label>
+                    <Select value={tripData.vehicleType} onValueChange={(value) => setTripData({...tripData, vehicleType: value})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="car">Car</SelectItem>
+                        <SelectItem value="bike">Motorcycle</SelectItem>
+                        <SelectItem value="bus">Bus</SelectItem>
+                        <SelectItem value="suv">SUV</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 {/* Fuel Calculator */}
@@ -195,15 +464,17 @@ const PlanTrip = () => {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-sm font-medium mb-2 block">Fuel Type</label>
-                      <select
-                        value={tripData.fuelType}
-                        onChange={(e) => setTripData({...tripData, fuelType: e.target.value})}
-                        className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      >
-                        <option value="petrol">Petrol</option>
-                        <option value="diesel">Diesel</option>
-                        <option value="cng">CNG</option>
-                      </select>
+                      <Select value={tripData.fuelType} onValueChange={(value) => setTripData({...tripData, fuelType: value})}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="petrol">Petrol</SelectItem>
+                          <SelectItem value="diesel">Diesel</SelectItem>
+                          <SelectItem value="cng">CNG</SelectItem>
+                          <SelectItem value="electric">Electric</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div>
                       <label className="text-sm font-medium mb-2 block">Price/L (₹)</label>
@@ -234,13 +505,22 @@ const PlanTrip = () => {
                   </div>
                 </div>
 
-                <Button 
-                  onClick={generateAIItinerary}
-                  className="w-full gradient-hero text-white border-0"
-                >
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Generate AI Itinerary
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={generateAIItinerary}
+                    className="flex-1 gradient-hero text-white border-0"
+                  >
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    AI Optimize
+                  </Button>
+                  <Button 
+                    onClick={saveTrip}
+                    disabled={saving || !user}
+                    variant="outline"
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
@@ -253,7 +533,9 @@ const PlanTrip = () => {
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total Distance</span>
-                    <span className="font-medium">2,847 km</span>
+                    <span className="font-medium">
+                      {routeData.distance ? `${routeData.distance.toFixed(0)} km` : 'Not calculated'}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Estimated Fuel</span>
@@ -261,11 +543,13 @@ const PlanTrip = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total Duration</span>
-                    <span className="font-medium">7 days</span>
+                    <span className="font-medium">
+                      {routeData.duration ? `${Math.floor(routeData.duration / 1440)} days ${Math.floor((routeData.duration % 1440) / 60)}h` : 'Not calculated'}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Waypoints</span>
-                    <span className="font-medium">{waypoints.length}</span>
+                    <span className="font-medium">{waypoints.filter(wp => wp.type === 'waypoint').length}</span>
                   </div>
                 </div>
               </CardContent>
@@ -275,11 +559,19 @@ const PlanTrip = () => {
           {/* Center Panel - Trip Planner */}
           <div className="lg:col-span-2">
             <div className="flex justify-between items-center mb-6">
-              <h1 className="text-3xl font-bold">Trip Planner</h1>
+              <div>
+                <h1 className="text-3xl font-bold">Trip Planner</h1>
+                <p className="text-muted-foreground">{tripData.title}</p>
+              </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={saveTrip}>
-                  <Save className="h-4 w-4 mr-2" />
-                  Save
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={saveTrip}
+                  disabled={saving || !user}
+                >
+                  {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                  {saving ? 'Saving...' : 'Save'}
                 </Button>
                 <Button variant="outline" size="sm" onClick={shareTrip}>
                   <Share className="h-4 w-4 mr-2" />
@@ -294,129 +586,45 @@ const PlanTrip = () => {
 
             <Tabs defaultValue="route" className="w-full">
               <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="route">Route Planning</TabsTrigger>
-                <TabsTrigger value="itinerary">Day by Day</TabsTrigger>
-                <TabsTrigger value="map">Map View</TabsTrigger>
+                <TabsTrigger value="route" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  <Route className="h-4 w-4 mr-2" />
+                  Route Planning
+                </TabsTrigger>
+                <TabsTrigger value="itinerary" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Day by Day
+                </TabsTrigger>
+                <TabsTrigger value="map" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  <MapPin className="h-4 w-4 mr-2" />
+                  Map View
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="route" className="space-y-4">
-                {/* Start Location */}
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-4 h-4 rounded-full bg-primary"></div>
-                      <div className="flex-1">
-                        <Input
-                          placeholder="Starting location (e.g., Delhi)"
-                          value={tripData.startLocation}
-                          onChange={(e) => setTripData({...tripData, startLocation: e.target.value})}
-                        />
-                      </div>
-                      <MapPin className="h-5 w-5 text-muted-foreground" />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Waypoints */}
-                {waypoints.map((waypoint, index) => (
-                  <Card key={waypoint.id} className="group hover:border-primary/20 transition-colors">
-                    <CardContent className="p-4">
-                      <div className="flex items-center space-x-3">
-                        <GripVertical className="h-4 w-4 text-muted-foreground cursor-move" />
-                        <div className="w-4 h-4 rounded-full bg-accent"></div>
-                        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <Input
-                            placeholder="Destination name"
-                            value={waypoint.name}
-                            className="col-span-2"
-                          />
-                          <div className="flex items-center space-x-2">
-                            <Badge variant="secondary">{waypoint.time}</Badge>
-                            <Badge variant="outline">{waypoint.cost}</Badge>
-                          </div>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeWaypoint(waypoint.id)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-
-                {/* Add Waypoint Button */}
-                <Button
-                  onClick={addWaypoint}
-                  variant="outline"
-                  className="w-full h-16 border-dashed"
-                >
-                  <Plus className="h-5 w-5 mr-2" />
-                  Add Stop ({waypoints.length}/100)
-                </Button>
-
-                {/* End Location */}
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-4 h-4 rounded-full bg-destructive"></div>
-                      <div className="flex-1">
-                        <Input
-                          placeholder="End location (e.g., Shillong)"
-                          value={tripData.endLocation}
-                          onChange={(e) => setTripData({...tripData, endLocation: e.target.value})}
-                        />
-                      </div>
-                      <MapPin className="h-5 w-5 text-muted-foreground" />
-                    </div>
-                  </CardContent>
-                </Card>
+                <RoutePlanner 
+                  onRouteChange={handleRouteChange}
+                  googleMapsApiKey={googleMapsApiKey}
+                />
               </TabsContent>
-
               <TabsContent value="itinerary" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Day-by-Day Itinerary</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-6">
-                      {[1, 2, 3, 4, 5].map((day) => (
-                        <div key={day} className="border-l-2 border-primary pl-4">
-                          <h3 className="font-semibold text-lg mb-2">Day {day}</h3>
-                          <div className="space-y-2">
-                            <div className="flex items-center space-x-2">
-                              <Clock className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-sm">9:00 AM - Start from Delhi</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Navigation className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-sm">350 km drive to Kaziranga</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <DollarSign className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-sm">Estimated cost: ₹2,500</span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
+                <DayByDay 
+                  waypoints={waypoints}
+                  routeData={routeData}
+                  onDaysChange={setDayPlans}
+                />
               </TabsContent>
 
               <TabsContent value="map" className="space-y-4">
                 <Card>
                   <CardContent className="p-0">
-                    <div className="h-96 rounded-lg overflow-hidden">
+                    <div className="h-[600px] rounded-lg overflow-hidden">
                       <InteractiveMap 
                         className="h-full"
                         showSearch={true}
                         showControls={true}
                         initialCenter={{ lat: 20.5937, lng: 78.9629 }}
                         initialZoom={5}
+                        apiKey={googleMapsApiKey}
                       />
                     </div>
                   </CardContent>
