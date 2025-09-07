@@ -35,7 +35,7 @@ interface MapCanvasProps {
   waypoints: Waypoint[];
   routeData: RouteData;
   googleMapsApiKey: string;
-  onWaypointDrag?: (waypointId: string, lat: number, lng: number) => void;
+  onWaypointDrag?: (waypointId: string, lat: number, lng: number, address?: string) => void;
   onLocationSelect?: (location: { lat: number; lng: number; address: string }) => void;
   isPickerMode?: boolean;
   className?: string;
@@ -216,12 +216,24 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
         infoWindow.open(map.current!, marker);
       });
 
-      // Add drag handler
+      // Add drag handler with reverse geocoding
       if (onWaypointDrag && !isPickerMode) {
-        marker.addListener('dragend', () => {
+        marker.addListener('dragend', async () => {
           const position = marker.getPosition();
           if (position) {
-            onWaypointDrag(waypoint.id, position.lat(), position.lng());
+            const lat = position.lat();
+            const lng = position.lng();
+            
+            // Reverse geocode to get address
+            const geocoder = new google.maps.Geocoder();
+            try {
+              const result = await geocoder.geocode({ location: { lat, lng } });
+              const address = result.results[0]?.formatted_address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+              onWaypointDrag(waypoint.id, lat, lng, address);
+            } catch (error) {
+              console.error('Reverse geocoding failed:', error);
+              onWaypointDrag(waypoint.id, lat, lng);
+            }
           }
         });
       }
@@ -298,8 +310,14 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
   }, [showPOIs, poiFilters, pois, isMapLoaded]);
 
   const addStopFromPOI = (poi: POI) => {
-    // This would typically call a parent callback to add the POI as a waypoint
-    console.log('Adding POI as stop:', poi);
+    // Call parent callback if available
+    if (onLocationSelect) {
+      onLocationSelect({
+        lat: poi.coordinates.lat,
+        lng: poi.coordinates.lng,
+        address: poi.address || poi.name
+      });
+    }
     setSelectedPOI(null);
   };
 

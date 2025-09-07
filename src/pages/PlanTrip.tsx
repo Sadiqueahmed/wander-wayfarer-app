@@ -43,16 +43,19 @@ import {
 
 interface Waypoint {
   id: string;
+  placeId?: string;
   name: string;
   lat: number;
   lng: number;
   type: 'start' | 'end' | 'waypoint';
+  address?: string;
 }
 
 interface RouteData {
   distance?: number;
   duration?: number;
   steps?: any[];
+  coordinates?: { lat: number; lng: number }[];
 }
 
 const PlanTrip = () => {

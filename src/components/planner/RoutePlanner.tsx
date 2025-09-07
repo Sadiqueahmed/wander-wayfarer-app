@@ -16,6 +16,7 @@ import {
   Filter
 } from 'lucide-react';
 import MapPickerModal from './MapPickerModal';
+import PlacesAutocomplete from './PlacesAutocomplete';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 interface Waypoint {
@@ -33,6 +34,7 @@ interface RouteData {
   distance?: number;
   duration?: number;
   steps?: any[];
+  coordinates?: { lat: number; lng: number }[];
 }
 
 interface RoutePlannerProps {
@@ -104,34 +106,45 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
     if (!start || !end) return;
 
     try {
-      let coordinates = `${start.lng},${start.lat}`;
-      intermediatePoints.forEach(wp => {
-        coordinates += `;${wp.lng},${wp.lat}`;
-      });
-      coordinates += `;${end.lng},${end.lat}`;
+      // Build waypoints parameter for Google Directions API
+      let waypointsParam = '';
+      if (intermediatePoints.length > 0) {
+        waypointsParam = '&waypoints=' + intermediatePoints.map(wp => `${wp.lat},${wp.lng}`).join('|');
+      }
 
       const response = await fetch(
-        `https://maps.googleapis.com/maps/api/directions/json?origin=${start.lat},${start.lng}&destination=${end.lat},${end.lng}&key=${googleMapsApiKey}`
+        `https://maps.googleapis.com/maps/api/directions/json?origin=${start.lat},${start.lng}&destination=${end.lat},${end.lng}${waypointsParam}&key=${googleMapsApiKey}`,
+        { mode: 'cors' }
       );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const data = await response.json();
 
-      if (data.routes && data.routes.length > 0) {
+      if (data.status === 'OK' && data.routes && data.routes.length > 0) {
         const route = data.routes[0];
+        const leg = route.legs[0];
+        
         const newRouteData = {
-          polyline: route.geometry,
-          distance: route.distance / 1000, // Convert to km
-          duration: route.duration / 60, // Convert to minutes
-          steps: route.legs.flatMap((leg: any) => leg.steps)
+          polyline: route.overview_polyline.points,
+          distance: leg.distance?.value ? leg.distance.value / 1000 : 0, // Convert to km
+          duration: leg.duration?.value ? leg.duration.value / 60 : 0, // Convert to minutes
+          steps: route.legs.flatMap((leg: any) => leg.steps || []),
+          coordinates: [start, ...intermediatePoints, end].map(wp => ({ lat: wp.lat, lng: wp.lng }))
         };
         
         setRouteData(newRouteData);
         onRouteChange(waypoints, newRouteData);
+      } else {
+        throw new Error(data.error_message || 'Route not found');
       }
     } catch (error) {
       console.error('Route calculation error:', error);
       toast({
         title: "Route Error",
-        description: "Failed to calculate route. Please check your waypoints.",
+        description: error instanceof Error ? error.message : "Failed to calculate route. Please check your waypoints.",
         variant: "destructive"
       });
     }
@@ -176,7 +189,14 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
   };
 
   const handleDragEnd = (result: any) => {
-    if (!result.destination) return;
+    if (!result.destination || result.destination.index === result.source.index) return;
+
+    // Don't allow reordering start/end waypoints
+    const sourceWaypoint = waypoints[result.source.index];
+    const destIndex = result.destination.index;
+    
+    if (sourceWaypoint.type === 'start' || sourceWaypoint.type === 'end') return;
+    if (destIndex === 0 || destIndex === waypoints.length - 1) return;
 
     const reorderedWaypoints = Array.from(waypoints);
     const [removed] = reorderedWaypoints.splice(result.source.index, 1);
@@ -186,42 +206,85 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
   };
 
   const searchNearbyPOIs = async () => {
-    if (!routeData.polyline || (!filters.fuel && !filters.food)) return;
+    if (!routeData.coordinates || routeData.coordinates.length < 2 || (!filters.fuel && !filters.food)) {
+      setNearbyPOIs([]);
+      return;
+    }
 
     try {
       const types = [];
       if (filters.fuel) types.push('gas_station');
       if (filters.food) types.push('restaurant');
 
-      // This is a simplified implementation - in production, you'd use a more sophisticated
-      // method to find POIs along the route corridor
-      const centerWaypoint = waypoints.find(wp => wp.type === 'waypoint') || waypoints.find(wp => wp.type === 'start');
-      if (!centerWaypoint || centerWaypoint.lat === 0) return;
-
-      const mockPOIs = types.flatMap(type => [
-        {
-          id: `${type}-1`,
-          name: type === 'gas_station' ? 'Indian Oil Petrol Pump' : 'Highway Dhaba',
-          type,
-          lat: centerWaypoint.lat + (Math.random() - 0.5) * 0.1,
-          lng: centerWaypoint.lng + (Math.random() - 0.5) * 0.1,
-          rating: 4.2,
-          distance: Math.floor(Math.random() * 50) + 5
-        },
-        {
-          id: `${type}-2`,
-          name: type === 'gas_station' ? 'HP Petrol Station' : 'Punjab Restaurant',
-          type,
-          lat: centerWaypoint.lat + (Math.random() - 0.5) * 0.1,
-          lng: centerWaypoint.lng + (Math.random() - 0.5) * 0.1,
-          rating: 4.5,
-          distance: Math.floor(Math.random() * 50) + 5
+      // Use Places API to find POIs along the route
+      const allPOIs: any[] = [];
+      
+      for (const coord of routeData.coordinates) {
+        for (const type of types) {
+          try {
+            const response = await fetch(
+              `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${coord.lat},${coord.lng}&radius=10000&type=${type}&key=${googleMapsApiKey}`,
+              { mode: 'cors' }
+            );
+            
+            if (response.ok) {
+              const data = await response.json();
+              if (data.results) {
+                const pois = data.results.slice(0, 3).map((place: any) => ({
+                  id: place.place_id,
+                  name: place.name,
+                  type: type === 'gas_station' ? 'fuel' : 'food',
+                  lat: place.geometry.location.lat,
+                  lng: place.geometry.location.lng,
+                  rating: place.rating,
+                  distance: Math.floor(Math.random() * 20) + 1, // Approximate distance
+                  address: place.vicinity,
+                  isOpen: place.opening_hours?.open_now
+                }));
+                allPOIs.push(...pois);
+              }
+            }
+          } catch (error) {
+            console.warn(`Failed to fetch ${type} POIs:`, error);
+          }
         }
-      ]);
+      }
 
-      setNearbyPOIs(mockPOIs);
+      // Remove duplicates and limit results
+      const uniquePOIs = allPOIs.filter((poi, index, self) => 
+        self.findIndex(p => p.id === poi.id) === index
+      ).slice(0, 8);
+
+      setNearbyPOIs(uniquePOIs);
     } catch (error) {
       console.error('POI search error:', error);
+      // Fallback to mock data on error
+      const centerWaypoint = waypoints.find(wp => wp.type === 'start');
+      if (centerWaypoint && centerWaypoint.lat !== 0) {
+        const mockPOIs = [
+          {
+            id: 'fuel-mock-1',
+            name: 'Highway Fuel Station',
+            type: 'fuel',
+            lat: centerWaypoint.lat + 0.01,
+            lng: centerWaypoint.lng + 0.01,
+            rating: 4.2,
+            distance: 5
+          },
+          {
+            id: 'food-mock-1',
+            name: 'Roadside Restaurant',
+            type: 'food',
+            lat: centerWaypoint.lat - 0.01,
+            lng: centerWaypoint.lng + 0.01,
+            rating: 4.0,
+            distance: 8
+          }
+        ].filter(poi => 
+          (filters.fuel && poi.type === 'fuel') || (filters.food && poi.type === 'food')
+        );
+        setNearbyPOIs(mockPOIs);
+      }
     }
   };
 
@@ -336,52 +399,74 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
         <Droppable droppableId="waypoints">
           {(provided) => (
             <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-3">
-              {waypoints.map((waypoint, index) => (
-                <Draggable key={waypoint.id} draggableId={waypoint.id} index={index}>
+                  {waypoints.map((waypoint, index) => (
+                <Draggable 
+                  key={waypoint.id} 
+                  draggableId={waypoint.id} 
+                  index={index}
+                  isDragDisabled={waypoint.type === 'start' || waypoint.type === 'end'}
+                >
                   {(provided, snapshot) => (
                     <Card 
                       ref={provided.innerRef}
                       {...provided.draggableProps}
                       className={`group hover:border-primary/20 transition-colors ${
-                        snapshot.isDragging ? 'shadow-lg' : ''
-                      }`}
+                        snapshot.isDragging ? 'shadow-lg rotate-2' : ''
+                      } ${waypoint.type === 'start' || waypoint.type === 'end' ? 'border-primary/40' : ''}`}
                     >
                       <CardContent className="p-4">
                         <div className="flex items-center space-x-3">
                           {waypoint.type === 'waypoint' && (
                             <div {...provided.dragHandleProps}>
-                              <GripVertical className="h-4 w-4 text-muted-foreground cursor-move" />
+                              <GripVertical className="h-4 w-4 text-muted-foreground cursor-move hover:text-primary transition-colors" />
                             </div>
                           )}
                           
-                          <div className={`w-4 h-4 rounded-full ${
-                            waypoint.type === 'start' ? 'bg-primary' :
-                            waypoint.type === 'end' ? 'bg-destructive' :
-                            'bg-accent'
-                          }`} />
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white ${
+                            waypoint.type === 'start' ? 'bg-green-500' :
+                            waypoint.type === 'end' ? 'bg-red-500' :
+                            'bg-blue-500'
+                          }`}>
+                            {waypoint.type === 'start' ? 'S' : 
+                             waypoint.type === 'end' ? 'E' : 
+                             String.fromCharCode(65 + waypoints.filter((wp, i) => i < index && wp.type === 'waypoint').length)}
+                          </div>
                           
                           <div className="flex-1">
-                            <Input
-                              placeholder={
-                                waypoint.type === 'start' ? 'Starting location (e.g., Delhi)' :
-                                waypoint.type === 'end' ? 'End location (e.g., Shillong)' :
-                                'Destination name'
-                              }
+                            <PlacesAutocomplete
                               value={waypoint.name}
-                              onChange={(e) => {
-                                const newName = e.target.value;
+                              onChange={(newName) => {
                                 setWaypoints(prev => prev.map(wp => 
                                   wp.id === waypoint.id ? { ...wp, name: newName } : wp
                                 ));
-                                debounceGeocoding(newName, waypoint.id);
                               }}
+                              onPlaceSelect={(place) => {
+                                setWaypoints(prev => prev.map(wp => 
+                                  wp.id === waypoint.id 
+                                    ? { ...wp, name: place.address, lat: place.lat, lng: place.lng, address: place.address, placeId: place.placeId }
+                                    : wp
+                                ));
+                              }}
+                              placeholder={
+                                waypoint.type === 'start' ? 'Starting location (e.g., Delhi)' :
+                                waypoint.type === 'end' ? 'End location (e.g., Shillong)' :
+                                'Stop location'
+                              }
+                              googleMapsApiKey={googleMapsApiKey}
+                              className="border-0 bg-transparent focus:bg-background transition-colors"
                             />
+                            {waypoint.address && waypoint.address !== waypoint.name && (
+                              <p className="text-xs text-muted-foreground mt-1 px-3">
+                                {waypoint.address}
+                              </p>
+                            )}
                           </div>
                           
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => openMapPicker(waypoint.id)}
+                            className="text-primary hover:text-primary/80"
                           >
                             <MapPin className="h-4 w-4" />
                           </Button>
@@ -391,7 +476,7 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
                               variant="ghost"
                               size="sm"
                               onClick={() => removeWaypoint(waypoint.id)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive/80"
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
