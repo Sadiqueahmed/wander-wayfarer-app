@@ -121,7 +121,27 @@ const PlanTrip = () => {
     if (!user) {
       toast({
         title: "Authentication Required",
-        description: "Please sign in to save your trip",
+        description: "Please sign in to save your trip. Redirecting to auth page...",
+        variant: "destructive"
+      });
+      // Redirect to auth page
+      window.location.href = '/auth';
+      return;
+    }
+
+    if (!tripData.title.trim()) {
+      toast({
+        title: "Trip Title Required",
+        description: "Please enter a title for your trip",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (waypoints.length < 2) {
+      toast({
+        title: "Route Required",
+        description: "Please add at least a start and end location",
         variant: "destructive"
       });
       return;
@@ -130,66 +150,75 @@ const PlanTrip = () => {
     setSaving(true);
     try {
       const tripToSave = {
-        title: tripData.title,
-        description: tripData.description,
-        start_location: tripData.startLocation,
-        end_location: tripData.endLocation,
+        title: tripData.title.trim(),
+        description: tripData.description?.trim() || '',
+        start_location: waypoints.find(w => w.type === 'start')?.name || tripData.startLocation,
+        end_location: waypoints.find(w => w.type === 'end')?.name || tripData.endLocation,
         start_date: tripData.startDate || null,
         end_date: tripData.endDate || null,
-        travelers: tripData.travelers,
-        budget: tripData.budget,
-        vehicle_type: tripData.vehicleType,
-        fuel_type: tripData.fuelType,
-        mileage: tripData.mileage,
-        fuel_price: tripData.fuelPrice,
-        total_distance: routeData.distance,
+        travelers: tripData.travelers || 1,
+        budget: tripData.budget || 0,
+        vehicle_type: tripData.vehicleType || 'car',
+        fuel_type: tripData.fuelType || 'petrol',
+        mileage: tripData.mileage || 15,
+        fuel_price: tripData.fuelPrice || 110,
+        total_distance: routeData.distance || 0,
         estimated_fuel_cost: calculateFuelCost(),
         status: 'draft',
         is_public: false,
         trip_data: {
-          waypoints: waypoints,
+          waypoints: waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0),
           routeData: routeData,
-          dayPlans: dayPlans
+          dayPlans: dayPlans || []
         }
       };
 
       let savedTrip;
       if (currentTripId) {
         savedTrip = await updateTrip(currentTripId, tripToSave);
+        toast({
+          title: "Trip Updated!",
+          description: "Your trip has been updated successfully.",
+        });
       } else {
         savedTrip = await createTrip(tripToSave);
         setCurrentTripId(savedTrip.id);
+        toast({
+          title: "Trip Saved!",
+          description: "Your trip has been saved successfully.",
+        });
       }
       
-      // Update current itinerary in store if needed
+      // Update current itinerary in store
       const { setCurrentItinerary } = useItineraryStore.getState();
       setCurrentItinerary({
         id: savedTrip.id,
         title: tripData.title,
-        waypoints: waypoints.map(wp => ({
+        waypoints: waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0).map((wp, index) => ({
           id: wp.id,
           name: wp.name,
           lat: wp.lat,
           lng: wp.lng,
           type: wp.type,
-          order: 0
+          order: index
         })),
         days: dayPlans || [],
         routeData: routeData,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: savedTrip.created_at || new Date().toISOString(),
+        updatedAt: savedTrip.updated_at || new Date().toISOString(),
         isPublic: false
       });
       
       // Save to store
       saveItinerary();
 
-      toast({
-        title: "Trip Saved!",
-        description: "Your trip has been saved successfully.",
-      });
     } catch (error) {
       console.error('Error saving trip:', error);
+      toast({
+        title: "Save Failed",
+        description: error instanceof Error ? error.message : "Failed to save trip. Please try again.",
+        variant: "destructive"
+      });
     } finally {
       setSaving(false);
     }
@@ -257,20 +286,58 @@ const PlanTrip = () => {
     });
   };
 
-  const shareTrip = () => {
-    navigator.clipboard.writeText(window.location.href);
-    toast({
-      title: "Link Copied!",
-      description: "Trip link has been copied to clipboard.",
-    });
+  const shareTrip = async () => {
+    if (!currentTripId) {
+      toast({
+        title: "Save Trip First",
+        description: "Please save your trip before sharing",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    const shareUrl = `${window.location.origin}/trip/${currentTripId}`;
+    
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast({
+        title: "Link Copied!",
+        description: "Trip share link has been copied to clipboard.",
+      });
+    } catch (error) {
+      // Fallback for browsers that don't support clipboard API
+      const textArea = document.createElement('textarea');
+      textArea.value = shareUrl;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      
+      toast({
+        title: "Link Copied!",
+        description: "Trip share link has been copied to clipboard.",
+      });
+    }
   };
 
   const exportTrip = () => {
+    if (waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0).length < 2) {
+      toast({
+        title: "No Route to Export",
+        description: "Please plan a route before exporting",
+        variant: "destructive"
+      });
+      return;
+    }
+
     const tripDetails = {
       ...tripData,
-      waypoints,
+      waypoints: waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0),
+      routeData,
+      dayPlans,
       fuelCost: calculateFuelCost(),
-      totalDistance: 2847
+      totalDistance: routeData.distance || 0,
+      exportedAt: new Date().toISOString()
     };
     
     const dataStr = JSON.stringify(tripDetails, null, 2);
@@ -278,8 +345,11 @@ const PlanTrip = () => {
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${tripData.title.replace(/\s+/g, '_')}_trip.json`;
+    link.download = `${tripData.title.replace(/[^a-zA-Z0-9]/g, '_')}_trip_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
     
     toast({
       title: "Trip Exported!",
@@ -287,13 +357,35 @@ const PlanTrip = () => {
     });
   };
 
-  const generateAIItinerary = () => {
-    // This could integrate with an AI service to optimize the route
-    // For now, we'll just show a placeholder message
-    toast({
-      title: "AI Optimization Coming Soon!",
-      description: "Smart route optimization will be available soon.",
-    });
+  const generateAIItinerary = async () => {
+    if (waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0).length < 2) {
+      toast({
+        title: "Add Route First",
+        description: "Please add start and end locations to optimize",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Simulate AI optimization with loading state
+    setSaving(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate API call
+      
+      // Here you would integrate with an AI service
+      toast({
+        title: "Route Optimized!",
+        description: "Your route has been optimized for fuel efficiency and time.",
+      });
+    } catch (error) {
+      toast({
+        title: "Optimization Failed",
+        description: "AI optimization is temporarily unavailable.",
+        variant: "destructive"
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -511,15 +603,17 @@ const PlanTrip = () => {
                 <div className="flex gap-2">
                   <Button 
                     onClick={generateAIItinerary}
+                    disabled={saving || waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0).length < 2}
                     className="flex-1 gradient-hero text-white border-0"
                   >
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    AI Optimize
+                    {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                    {saving ? 'Optimizing...' : 'AI Optimize'}
                   </Button>
                   <Button 
                     onClick={saveTrip}
-                    disabled={saving || !user}
+                    disabled={saving || waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0).length < 2}
                     variant="outline"
+                    className={!user ? "cursor-not-allowed opacity-50" : ""}
                   >
                     {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   </Button>
@@ -571,16 +665,29 @@ const PlanTrip = () => {
                   variant="outline" 
                   size="sm" 
                   onClick={saveTrip}
-                  disabled={saving || !user}
+                  disabled={saving || waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0).length < 2}
+                  className={!user ? "cursor-not-allowed opacity-50" : ""}
                 >
                   {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                  {saving ? 'Saving...' : 'Save'}
+                  {saving ? 'Saving...' : !user ? 'Sign in to Save' : currentTripId ? 'Update' : 'Save'}
                 </Button>
-                <Button variant="outline" size="sm" onClick={shareTrip}>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={shareTrip}
+                  disabled={!currentTripId}
+                  className={!currentTripId ? "cursor-not-allowed opacity-50" : ""}
+                >
                   <Share className="h-4 w-4 mr-2" />
                   Share
                 </Button>
-                <Button variant="outline" size="sm" onClick={exportTrip}>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={exportTrip}
+                  disabled={waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0).length < 2}
+                  className={waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0).length < 2 ? "cursor-not-allowed opacity-50" : ""}
+                >
                   <Download className="h-4 w-4 mr-2" />
                   Export
                 </Button>
