@@ -1,5 +1,5 @@
 import Header from "@/components/Header";
-import InteractiveMap from "@/components/InteractiveMap";
+import MapCanvas from "@/components/planner/MapCanvas";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -150,10 +150,11 @@ const Northeast = () => {
           </div>
           
           <div className="bg-background rounded-xl shadow-lg overflow-hidden">
-            <InteractiveMap 
+            <MapCanvas
+              waypoints={[]}
+              routeData={{}}
+              googleMapsApiKey="AIzaSyBbJbSHj4dI5igT0K5WPFISHYNJuVy48oE"
               className="h-96"
-              initialCenter={{ lat: 26.2006, lng: 92.9376 }}
-              initialZoom={6.5}
             />
           </div>
         </div>

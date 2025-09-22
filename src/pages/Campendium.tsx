@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
-import InteractiveMap from "@/components/InteractiveMap";
-import RoutePlanner from "@/components/planner/RoutePlanner";
 import MapCanvas from "@/components/planner/MapCanvas";
+import RoutePlanner from "@/components/planner/RoutePlanner";
 import DayByDay from "@/components/planner/DayByDay";
 import ShareButton from "@/components/planner/ShareButton";
 import ExportPdfButton from "@/components/planner/ExportPdfButton";
@@ -541,11 +540,11 @@ const Campendium = () => {
                   className="h-full"
                 />
               ) : (
-                <InteractiveMap 
+                <MapCanvas
+                  waypoints={[]}
+                  routeData={{}}
+                  googleMapsApiKey="AIzaSyBbJbSHj4dI5igT0K5WPFISHYNJuVy48oE"
                   className="h-full"
-                  showSearch={false}
-                  initialCenter={{ lat: 20.5937, lng: 78.9629 }}
-                  initialZoom={5}
                 />
               )}
               
