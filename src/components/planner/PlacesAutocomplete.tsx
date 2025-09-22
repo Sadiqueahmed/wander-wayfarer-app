@@ -39,21 +39,39 @@ const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
   const placesService = useRef<google.maps.places.PlacesService | null>(null);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.google) {
-      autocompleteService.current = new window.google.maps.places.AutocompleteService();
-      
-      // Create a dummy map element for PlacesService
-      const mapDiv = document.createElement('div');
-      const map = new window.google.maps.Map(mapDiv);
-      placesService.current = new window.google.maps.places.PlacesService(map);
-    }
+    // Load Google Maps API if not already loaded
+    const loadGoogleMaps = async () => {
+      if (typeof window !== 'undefined' && !window.google) {
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places`;
+        script.async = true;
+        script.defer = true;
+        
+        await new Promise<void>((resolve, reject) => {
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error('Google Maps API failed to load'));
+          document.head.appendChild(script);
+        });
+      }
+
+      if (window.google) {
+        autocompleteService.current = new window.google.maps.places.AutocompleteService();
+        
+        // Create a dummy map element for PlacesService
+        const mapDiv = document.createElement('div');
+        const map = new window.google.maps.Map(mapDiv);
+        placesService.current = new window.google.maps.places.PlacesService(map);
+      }
+    };
+
+    loadGoogleMaps().catch(console.error);
 
     // Load recent searches from localStorage
     const stored = localStorage.getItem('recentLocationSearches');
     if (stored) {
       setRecentSearches(JSON.parse(stored));
     }
-  }, []);
+  }, [googleMapsApiKey]);
 
   const fetchPredictions = async (query: string) => {
     if (!autocompleteService.current || query.length < 2) {
@@ -64,7 +82,8 @@ const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
     const request = {
       input: query,
       componentRestrictions: { country: 'in' }, // Restrict to India
-      types: ['geocode', 'establishment']
+      types: ['geocode', 'establishment'],
+      radius: 50000 // 50km radius for better results
     };
 
     autocompleteService.current.getPlacePredictions(request, (predictions, status) => {

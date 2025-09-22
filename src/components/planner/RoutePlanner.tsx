@@ -83,7 +83,7 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
         throw error;
       }
       
-      if (data.results && data.results.length > 0) {
+      if (data && data.results && data.results.length > 0) {
         const result = data.results[0];
         const lat = result.geometry.location.lat;
         const lng = result.geometry.location.lng;
@@ -93,12 +93,19 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
             ? { ...wp, lat, lng, address: result.formatted_address, placeId: result.place_id }
             : wp
         ));
+        
+        toast({
+          title: "Location Found",
+          description: `Found: ${result.formatted_address}`,
+        });
+      } else {
+        throw new Error('No results found');
       }
     } catch (error) {
       console.error('Geocoding error:', error);
       toast({
-        title: "Geocoding Error",
-        description: "Failed to find location. Please try a different address.",
+        title: "Location Not Found",
+        description: "Please try a more specific address or use the map picker.",
         variant: "destructive"
       });
     }
@@ -443,35 +450,51 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
                              String.fromCharCode(65 + waypoints.filter((wp, i) => i < index && wp.type === 'waypoint').length)}
                           </div>
                           
-                          <div className="flex-1">
-                            <PlacesAutocomplete
-                              value={waypoint.name}
-                              onChange={(newName) => {
-                                setWaypoints(prev => prev.map(wp => 
-                                  wp.id === waypoint.id ? { ...wp, name: newName } : wp
-                                ));
-                              }}
-                              onPlaceSelect={(place) => {
-                                setWaypoints(prev => prev.map(wp => 
-                                  wp.id === waypoint.id 
-                                    ? { ...wp, name: place.address, lat: place.lat, lng: place.lng, address: place.address, placeId: place.placeId }
-                                    : wp
-                                ));
-                              }}
-                              placeholder={
-                                waypoint.type === 'start' ? 'Starting location (e.g., Delhi)' :
-                                waypoint.type === 'end' ? 'End location (e.g., Shillong)' :
-                                'Stop location'
-                              }
-                              googleMapsApiKey={googleMapsApiKey}
-                              className="border-0 bg-transparent focus:bg-background transition-colors"
-                            />
-                            {waypoint.address && waypoint.address !== waypoint.name && (
-                              <p className="text-xs text-muted-foreground mt-1 px-3">
-                                {waypoint.address}
-                              </p>
-                            )}
-                          </div>
+                           <div className="flex-1 relative">
+                             <PlacesAutocomplete
+                               value={waypoint.name}
+                               onChange={(newName) => {
+                                 setWaypoints(prev => prev.map(wp => 
+                                   wp.id === waypoint.id ? { ...wp, name: newName } : wp
+                                 ));
+                                 // Trigger debounced geocoding for manual input
+                                 if (newName.trim() && newName.length > 2) {
+                                   debounceGeocoding(newName, waypoint.id);
+                                 }
+                               }}
+                               onPlaceSelect={(place) => {
+                                 setWaypoints(prev => prev.map(wp => 
+                                   wp.id === waypoint.id 
+                                     ? { ...wp, name: place.address, lat: place.lat, lng: place.lng, address: place.address, placeId: place.placeId }
+                                     : wp
+                                 ));
+                               }}
+                               placeholder={
+                                 waypoint.type === 'start' ? 'Starting location (e.g., Delhi)' :
+                                 waypoint.type === 'end' ? 'End location (e.g., Shillong)' :
+                                 'Stop location'
+                               }
+                               googleMapsApiKey={googleMapsApiKey}
+                               className="border-0 bg-transparent focus:bg-background transition-colors pr-12"
+                             />
+                             
+                             {/* Location status indicator */}
+                             <div className="absolute right-8 top-1/2 transform -translate-y-1/2">
+                               {waypoint.lat !== 0 && waypoint.lng !== 0 ? (
+                                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                               ) : waypoint.name.trim() ? (
+                                 <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                               ) : (
+                                 <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
+                               )}
+                             </div>
+                             
+                             {waypoint.address && waypoint.address !== waypoint.name && (
+                               <p className="text-xs text-muted-foreground mt-1 px-3">
+                                 {waypoint.address}
+                               </p>
+                             )}
+                           </div>
                           
                           <Button
                             variant="ghost"

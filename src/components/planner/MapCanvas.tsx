@@ -1,14 +1,15 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { Loader } from '@googlemaps/js-api-loader';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Star, Plus, Phone, Navigation, Fuel, Utensils } from 'lucide-react';
+import { MapPin, Star, Clock, Plus, ExternalLink } from 'lucide-react';
 
 interface POI {
   id: string;
   name: string;
-  coordinates: { lat: number; lng: number };
+  lat: number;
+  lng: number;
   type: 'fuel' | 'food';
   rating?: number;
   address?: string;
@@ -25,7 +26,7 @@ interface Waypoint {
 }
 
 interface RouteData {
-  polyline?: any;
+  polyline?: string;
   distance?: number;
   duration?: number;
   coordinates?: { lat: number; lng: number }[];
@@ -35,12 +36,12 @@ interface MapCanvasProps {
   waypoints: Waypoint[];
   routeData: RouteData;
   googleMapsApiKey: string;
-  onWaypointDrag?: (waypointId: string, lat: number, lng: number, address?: string) => void;
-  onLocationSelect?: (location: { lat: number; lng: number; address: string }) => void;
-  isPickerMode?: boolean;
-  className?: string;
+  onWaypointDrag?: (waypointId: string, lat: number, lng: number) => void;
+  onLocationSelect?: (lat: number, lng: number, address: string) => void;
   showPOIs?: boolean;
   poiFilters?: { fuel: boolean; food: boolean };
+  isPickerMode?: boolean;
+  className?: string;
 }
 
 const MapCanvas: React.FC<MapCanvasProps> = ({
@@ -49,75 +50,37 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
   googleMapsApiKey,
   onWaypointDrag,
   onLocationSelect,
-  isPickerMode = false,
-  className = '',
   showPOIs = false,
-  poiFilters = { fuel: false, food: false }
+  poiFilters = { fuel: false, food: false },
+  isPickerMode = false
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
-  const markers = useRef<google.maps.Marker[]>([]);
   const directionsService = useRef<google.maps.DirectionsService | null>(null);
   const directionsRenderer = useRef<google.maps.DirectionsRenderer | null>(null);
+  const markersRef = useRef<google.maps.Marker[]>([]);
+  const poiMarkersRef = useRef<google.maps.Marker[]>([]);
+  
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [selectedPOI, setSelectedPOI] = useState<POI | null>(null);
-  const [pois, setPois] = useState<POI[]>([]);
+  const [nearbyPOIs, setNearbyPOIs] = useState<POI[]>([]);
 
-  // Sample POIs for demonstration
-  const samplePOIs: POI[] = [
-    {
-      id: 'fuel-1',
-      name: 'Indian Oil Petrol Pump',
-      coordinates: { lat: 28.6139, lng: 77.2090 },
-      type: 'fuel',
-      rating: 4.2,
-      address: 'Connaught Place, New Delhi',
-      isOpen: true
-    },
-    {
-      id: 'food-1',
-      name: 'Karim\'s Restaurant',
-      coordinates: { lat: 28.6562, lng: 77.2315 },
-      type: 'food',
-      rating: 4.5,
-      address: 'Jama Masjid, Old Delhi',
-      isOpen: true
-    },
-    {
-      id: 'fuel-2',
-      name: 'HP Petrol Pump',
-      coordinates: { lat: 30.3165, lng: 78.0322 },
-      type: 'fuel',
-      rating: 4.0,
-      address: 'Dehradun, Uttarakhand'
-    },
-    {
-      id: 'food-2',
-      name: 'Garhwal Mandal Vikas',
-      coordinates: { lat: 30.3165, lng: 78.0322 },
-      type: 'food',
-      rating: 4.3,
-      address: 'ISBT, Dehradun'
-    }
-  ];
-
-  const handleMapClick = useCallback(async (e: google.maps.MapMouseEvent) => {
-    if (!isPickerMode || !onLocationSelect || !e.latLng) return;
-
+  // Handle map clicks for location selection
+  const handleMapClick = useCallback((e: google.maps.MapMouseEvent) => {
+    if (!isPickerMode || !e.latLng || !onLocationSelect) return;
+    
     const lat = e.latLng.lat();
     const lng = e.latLng.lng();
     
+    // Reverse geocode to get address
     const geocoder = new google.maps.Geocoder();
-    
-    try {
-      const result = await geocoder.geocode({ location: { lat, lng } });
-      const address = result.results[0]?.formatted_address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-      
-      onLocationSelect({ lat, lng, address });
-    } catch (error) {
-      console.error('Geocoding failed:', error);
-      onLocationSelect({ lat, lng, address: `${lat.toFixed(4)}, ${lng.toFixed(4)}` });
-    }
+    geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+      if (status === 'OK' && results && results[0]) {
+        onLocationSelect(lat, lng, results[0].formatted_address);
+      } else {
+        onLocationSelect(lat, lng, `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+      }
+    });
   }, [isPickerMode, onLocationSelect]);
 
   // Initialize map
@@ -134,19 +97,27 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
       if (!mapContainer.current) return;
 
       map.current = new google.maps.Map(mapContainer.current, {
-        center: { lat: 20.5937, lng: 78.9629 },
+        center: { lat: 20.5937, lng: 78.9629 }, // Center of India
         zoom: 5,
         mapTypeControl: true,
-        fullscreenControl: true,
-        streetViewControl: true,
+        fullscreenControl: false,
+        streetViewControl: false,
         zoomControl: true,
+        styles: [
+          {
+            featureType: 'poi',
+            elementType: 'labels',
+            stylers: [{ visibility: 'on' }]
+          }
+        ]
       });
 
       directionsService.current = new google.maps.DirectionsService();
       directionsRenderer.current = new google.maps.DirectionsRenderer({
-        draggable: !isPickerMode,
+        draggable: true,
+        suppressMarkers: true, // We'll add custom markers
         polylineOptions: {
-          strokeColor: '#ff6b35',
+          strokeColor: '#FF8C00',
           strokeWeight: 4,
           strokeOpacity: 0.8
         }
@@ -154,237 +125,297 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
 
       directionsRenderer.current.setMap(map.current);
 
-      if (isPickerMode && onLocationSelect) {
-        map.current.addListener('click', handleMapClick);
-      }
+      // Add map click listener
+      map.current.addListener('click', handleMapClick);
 
       setIsMapLoaded(true);
-      setPois(samplePOIs);
     }).catch((error) => {
       console.error('Error loading Google Maps:', error);
     });
 
+    // Cleanup on unmount
     return () => {
-      markers.current.forEach(marker => marker.setMap(null));
-      markers.current = [];
+      markersRef.current.forEach(marker => marker.setMap(null));
+      poiMarkersRef.current.forEach(marker => marker.setMap(null));
     };
-  }, [googleMapsApiKey, isPickerMode, handleMapClick]);
+  }, [googleMapsApiKey, handleMapClick]);
 
-  // Update markers when waypoints change
+  // Update map markers when waypoints change
   useEffect(() => {
     if (!map.current || !isMapLoaded) return;
 
     // Clear existing markers
-    markers.current.forEach(marker => marker.setMap(null));
-    markers.current = [];
+    markersRef.current.forEach(marker => marker.setMap(null));
+    markersRef.current = [];
 
-    // Add new markers
-    waypoints.forEach((waypoint, index) => {
-      if (waypoint.lat === 0 && waypoint.lng === 0) return;
-
+    const validWaypoints = waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0);
+    
+    validWaypoints.forEach((waypoint, index) => {
       const marker = new google.maps.Marker({
         position: { lat: waypoint.lat, lng: waypoint.lng },
         map: map.current!,
-        title: waypoint.name || waypoint.type,
-        draggable: !!onWaypointDrag && !isPickerMode,
+        title: waypoint.name,
+        draggable: !!onWaypointDrag,
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
-          scale: 16,
-          fillColor: waypoint.type === 'start' ? '#22c55e' : waypoint.type === 'end' ? '#ef4444' : '#3b82f6',
+          scale: 8,
+          fillColor: waypoint.type === 'start' ? '#10B981' : 
+                    waypoint.type === 'end' ? '#EF4444' : '#3B82F6',
           fillOpacity: 1,
-          strokeColor: '#ffffff',
+          strokeColor: '#FFFFFF',
           strokeWeight: 2
         },
         label: {
-          text: waypoint.type === 'start' ? 'S' : waypoint.type === 'end' ? 'E' : String.fromCharCode(65 + index - 1),
-          color: '#ffffff',
-          fontSize: '12px',
-          fontWeight: 'bold'
+          text: waypoint.type === 'start' ? 'S' : 
+                waypoint.type === 'end' ? 'E' : 
+                String.fromCharCode(65 + validWaypoints.filter((wp, i) => i < index && wp.type === 'waypoint').length),
+          color: '#FFFFFF',
+          fontWeight: 'bold',
+          fontSize: '12px'
         }
       });
 
-      const infoWindow = new google.maps.InfoWindow({
-        content: `
-          <div class="p-2">
-            <h3 class="font-semibold">${waypoint.name || waypoint.type}</h3>
-            <p class="text-sm text-gray-600">${waypoint.address || waypoint.type}</p>
-          </div>
-        `
-      });
-
-      marker.addListener('click', () => {
-        infoWindow.open(map.current!, marker);
-      });
-
-      // Add drag handler with reverse geocoding
-      if (onWaypointDrag && !isPickerMode) {
-        marker.addListener('dragend', async () => {
-          const position = marker.getPosition();
-          if (position) {
-            const lat = position.lat();
-            const lng = position.lng();
-            
-            // Reverse geocode to get address
-            const geocoder = new google.maps.Geocoder();
-            try {
-              const result = await geocoder.geocode({ location: { lat, lng } });
-              const address = result.results[0]?.formatted_address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-              onWaypointDrag(waypoint.id, lat, lng, address);
-            } catch (error) {
-              console.error('Reverse geocoding failed:', error);
-              onWaypointDrag(waypoint.id, lat, lng);
-            }
+      // Add drag listener
+      if (onWaypointDrag) {
+        marker.addListener('dragend', async (e: google.maps.MapMouseEvent) => {
+          if (!e.latLng) return;
+          
+          const lat = e.latLng.lat();
+          const lng = e.latLng.lng();
+          
+          // Reverse geocode to get address
+          const geocoder = new google.maps.Geocoder();
+          try {
+            const result = await geocoder.geocode({ location: { lat, lng } });
+            const address = result.results[0]?.formatted_address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            onWaypointDrag(waypoint.id, lat, lng);
+          } catch (error) {
+            console.error('Reverse geocoding error:', error);
+            onWaypointDrag(waypoint.id, lat, lng);
           }
         });
       }
 
-      markers.current.push(marker);
+      markersRef.current.push(marker);
     });
 
-    // Fit map to markers if there are valid waypoints
-    const validWaypoints = waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0);
-    if (validWaypoints.length > 0 && !isPickerMode) {
+    // Fit bounds to show all waypoints
+    if (validWaypoints.length > 0) {
       const bounds = new google.maps.LatLngBounds();
       validWaypoints.forEach(wp => bounds.extend({ lat: wp.lat, lng: wp.lng }));
-      
       map.current.fitBounds(bounds);
+      
+      // Ensure minimum zoom level
+      google.maps.event.addListenerOnce(map.current, 'bounds_changed', () => {
+        if (map.current && map.current.getZoom()! > 15) {
+          map.current.setZoom(15);
+        }
+      });
     }
-  }, [waypoints, isMapLoaded, onWaypointDrag, isPickerMode]);
+  }, [waypoints, isMapLoaded, onWaypointDrag]);
 
-  // Update route when routeData changes
+  // Update route display when route data changes
   useEffect(() => {
-    if (!map.current || !isMapLoaded || !directionsRenderer.current || !directionsService.current) return;
+    if (!directionsRenderer.current || !routeData.polyline || !isMapLoaded) return;
 
-    if (routeData.coordinates && routeData.coordinates.length > 1) {
-      const waypoints = routeData.coordinates.slice(1, -1).map(coord => ({
-        location: coord,
+    const validWaypoints = waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0);
+    const start = validWaypoints.find(wp => wp.type === 'start');
+    const end = validWaypoints.find(wp => wp.type === 'end');
+    const intermediatePoints = validWaypoints.filter(wp => wp.type === 'waypoint');
+
+    if (!start || !end) return;
+
+    const request: google.maps.DirectionsRequest = {
+      origin: { lat: start.lat, lng: start.lng },
+      destination: { lat: end.lat, lng: end.lng },
+      waypoints: intermediatePoints.map(wp => ({
+        location: { lat: wp.lat, lng: wp.lng },
         stopover: true
-      }));
+      })),
+      travelMode: google.maps.TravelMode.DRIVING,
+      optimizeWaypoints: true
+    };
 
-      const request: google.maps.DirectionsRequest = {
-        origin: routeData.coordinates[0],
-        destination: routeData.coordinates[routeData.coordinates.length - 1],
-        waypoints: waypoints,
-        travelMode: google.maps.TravelMode.DRIVING
-      };
-
-      directionsService.current.route(request, (result, status) => {
-        if (status === google.maps.DirectionsStatus.OK && result) {
-          directionsRenderer.current?.setDirections(result);
-        }
-      });
-    }
-  }, [routeData, isMapLoaded]);
-
-  // Update POI markers based on filters
-  useEffect(() => {
-    if (!map.current || !isMapLoaded || !showPOIs) return;
-
-    // Remove existing POI markers
-    const existingPOIMarkers = document.querySelectorAll('.poi-marker');
-    existingPOIMarkers.forEach(marker => marker.remove());
-
-    // Add filtered POI markers
-    const filteredPOIs = pois.filter(poi => 
-      (poiFilters?.fuel && poi.type === 'fuel') || 
-      (poiFilters?.food && poi.type === 'food')
-    );
-
-    filteredPOIs.forEach(poi => {
-      const marker = new google.maps.Marker({
-        position: poi.coordinates,
-        map: map.current!,
-        title: poi.name,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 12,
-          fillColor: poi.type === 'fuel' ? '#f59e0b' : '#10b981',
-          fillOpacity: 1,
-          strokeColor: '#ffffff',
-          strokeWeight: 2
-        }
-      });
-
-      marker.addListener('click', () => setSelectedPOI(poi));
+    directionsService.current?.route(request, (result, status) => {
+      if (status === 'OK' && result) {
+        directionsRenderer.current?.setDirections(result);
+      }
     });
-  }, [showPOIs, poiFilters, pois, isMapLoaded]);
+  }, [routeData, waypoints, isMapLoaded]);
+
+  // Handle POI display
+  useEffect(() => {
+    if (!map.current || !showPOIs || (!poiFilters.fuel && !poiFilters.food)) {
+      // Clear POI markers
+      poiMarkersRef.current.forEach(marker => marker.setMap(null));
+      poiMarkersRef.current = [];
+      setNearbyPOIs([]);
+      return;
+    }
+
+    const validWaypoints = waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0);
+    if (validWaypoints.length === 0) return;
+
+    // Search for POIs near the route
+    const placesService = new google.maps.places.PlacesService(map.current);
+    const allPOIs: POI[] = [];
+
+    validWaypoints.forEach((waypoint, index) => {
+      const types = [];
+      if (poiFilters.fuel) types.push('gas_station');
+      if (poiFilters.food) types.push('restaurant');
+
+      types.forEach(type => {
+        const request = {
+          location: { lat: waypoint.lat, lng: waypoint.lng },
+          radius: 10000,
+          type: type
+        };
+
+        placesService.nearbySearch(request, (results, status) => {
+          if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+            const pois = results.slice(0, 3).map(place => ({
+              id: place.place_id!,
+              name: place.name!,
+              lat: place.geometry!.location!.lat(),
+              lng: place.geometry!.location!.lng(),
+              type: type === 'gas_station' ? 'fuel' as const : 'food' as const,
+              rating: place.rating,
+              address: place.vicinity,
+              isOpen: place.opening_hours?.open_now
+            }));
+
+            allPOIs.push(...pois);
+            setNearbyPOIs(prevPOIs => {
+              const combined = [...prevPOIs, ...pois];
+              // Remove duplicates
+              const unique = combined.filter((poi, index, self) => 
+                self.findIndex(p => p.id === poi.id) === index
+              );
+              return unique.slice(0, 10); // Limit to 10 POIs
+            });
+
+            // Add POI markers
+            pois.forEach(poi => {
+              const poiMarker = new google.maps.Marker({
+                position: { lat: poi.lat, lng: poi.lng },
+                map: map.current!,
+                title: poi.name,
+                icon: {
+                  url: poi.type === 'fuel' ? 
+                    'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTMgMThIMS41QzEuMjIzODYgMTggMSAxNy43NzYxIDEgMTcuNUMxIDE3LjIyMzkgMS4yMjM4NiAxNyAxLjUgMTdIM1YxOFpNMjIuNSAxN0gyMVYxOEgyMi41QzIyLjc3NjEgMTggMjMgMTcuNzc2MSAyMyAxNy41QzIzIDE3LjIyMzkgMjIuNzc2MSAxNyAyMi41IDE3WiIgZmlsbD0iIzMzNzNkYyIvPgo8L3N2Zz4K' :
+                    'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyIDJDNi40OCAyIDIgNi40OCAyIDEyUzYuNDggMjIgMTIgMjJTMjIgMTcuNTIgMjIgMTJTMTcuNTIgMiAxMiAyWk0xMyAxN0g5VjE1SDEzVjE3Wk0xNSAxM0g5VjExSDE1VjEzWiIgZmlsbD0iI2Y1OTcwMyIvPgo8L3N2Zz4K',
+                  scaledSize: new google.maps.Size(24, 24)
+                }
+              });
+
+              poiMarker.addListener('click', () => {
+                setSelectedPOI(poi);
+              });
+
+              poiMarkersRef.current.push(poiMarker);
+            });
+          }
+        });
+      });
+    });
+  }, [showPOIs, poiFilters, waypoints, isMapLoaded]);
 
   const addStopFromPOI = (poi: POI) => {
-    // Call parent callback if available
     if (onLocationSelect) {
-      onLocationSelect({
-        lat: poi.coordinates.lat,
-        lng: poi.coordinates.lng,
-        address: poi.address || poi.name
-      });
+      onLocationSelect(poi.lat, poi.lng, poi.name);
+      setSelectedPOI(null);
     }
-    setSelectedPOI(null);
   };
 
   return (
-    <div className={`relative ${className}`}>
-      <div ref={mapContainer} className="w-full h-full rounded-lg" />
-      
-      {/* Loading overlay */}
-      {!isMapLoaded && (
-        <div className="absolute inset-0 bg-muted/50 backdrop-blur-sm rounded-lg flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-            <p className="text-sm text-muted-foreground">Loading map...</p>
+    <div className="relative h-full">
+      {/* Map Container */}
+      <div className="w-full h-full rounded-lg overflow-hidden border">
+        <div ref={mapContainer} className="w-full h-full" />
+        
+        {/* Loading overlay */}
+        {!isMapLoaded && (
+          <div className="absolute inset-0 bg-muted/50 backdrop-blur-sm rounded-lg flex items-center justify-center">
+            <div className="text-center">
+              <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+              <p className="text-sm text-muted-foreground">Loading map...</p>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* POI Info Card */}
       {selectedPOI && !isPickerMode && (
-        <Card className="absolute bottom-4 left-4 right-4 p-4 bg-background/95 backdrop-blur z-10">
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                {selectedPOI.type === 'fuel' ? 
-                  <Fuel className="h-4 w-4 text-amber-500" /> : 
-                  <Utensils className="h-4 w-4 text-emerald-500" />
-                }
-                <h3 className="font-semibold">{selectedPOI.name}</h3>
-              </div>
-              <p className="text-sm text-muted-foreground">{selectedPOI.address}</p>
-              <div className="flex items-center gap-4 mt-2">
-                {selectedPOI.rating && (
-                  <div className="flex items-center gap-1">
-                    <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                    <span className="text-sm">{selectedPOI.rating}</span>
-                  </div>
-                )}
+        <Card className="absolute top-4 right-4 w-80 z-10 shadow-lg">
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between mb-2">
+              <h4 className="font-semibold">{selectedPOI.name}</h4>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedPOI(null)}
+                className="h-6 w-6 p-0"
+              >
+                ×
+              </Button>
+            </div>
+            
+            {selectedPOI.address && (
+              <p className="text-sm text-muted-foreground mb-2">{selectedPOI.address}</p>
+            )}
+            
+            <div className="flex items-center gap-2 mb-3">
+              {selectedPOI.rating && (
+                <div className="flex items-center">
+                  <Star className="h-4 w-4 text-yellow-400 fill-current mr-1" />
+                  <span className="text-sm">{selectedPOI.rating}</span>
+                </div>
+              )}
+              
+              {selectedPOI.isOpen !== undefined && (
                 <Badge variant={selectedPOI.isOpen ? "default" : "secondary"}>
                   {selectedPOI.isOpen ? "Open" : "Closed"}
                 </Badge>
-              </div>
+              )}
+              
+              <Badge variant="outline">
+                {selectedPOI.type === 'fuel' ? 'Fuel Station' : 'Restaurant'}
+              </Badge>
             </div>
+            
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setSelectedPOI(null)}>
-                <Phone className="h-4 w-4 mr-1" />
-                Call
-              </Button>
-              <Button variant="outline" size="sm">
-                <Navigation className="h-4 w-4 mr-1" />
-                Directions
-              </Button>
-              <Button onClick={() => addStopFromPOI(selectedPOI)} className="gradient-hero text-white">
+              <Button
+                size="sm"
+                onClick={() => addStopFromPOI(selectedPOI)}
+                className="flex-1"
+              >
                 <Plus className="h-4 w-4 mr-1" />
-                Add Stop
+                Add as Stop
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const url = `https://www.google.com/maps/place/${selectedPOI.name}/@${selectedPOI.lat},${selectedPOI.lng}`;
+                  window.open(url, '_blank');
+                }}
+              >
+                <ExternalLink className="h-4 w-4" />
               </Button>
             </div>
-          </div>
+          </CardContent>
         </Card>
       )}
 
-      {/* Picker mode instructions */}
+      {/* Picker Mode Instructions */}
       {isPickerMode && (
-        <Card className="absolute top-4 left-4 right-4 p-3 bg-background/95 backdrop-blur z-10">
-          <p className="text-sm text-center">
-            Click on the map to select a location
-          </p>
-        </Card>
+        <div className="absolute top-4 left-4 bg-background/90 backdrop-blur rounded-lg p-3 shadow-lg">
+          <div className="flex items-center text-sm">
+            <MapPin className="h-4 w-4 mr-2 text-primary" />
+            Click anywhere on the map to select a location
+          </div>
+        </div>
       )}
     </div>
   );

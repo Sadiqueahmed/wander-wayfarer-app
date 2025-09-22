@@ -94,28 +94,35 @@ const DayByDay: React.FC<DayByDayProps> = ({ waypoints, routeData, onDaysChange 
       const dayItems: DayItem[] = [];
 
       // Add route leg for the day
-      if (i < validWaypoints.length - 1) {
+      const fromWaypoint = i < validWaypoints.length ? validWaypoints[i] : validWaypoints[validWaypoints.length - 1];
+      const toWaypoint = i + 1 < validWaypoints.length ? validWaypoints[i + 1] : null;
+      
+      if (toWaypoint) {
         dayItems.push({
           id: `leg-${i}`,
           type: 'leg',
-          title: `${validWaypoints[i]?.name || 'Start'} to ${validWaypoints[i + 1]?.name || 'Next Stop'}`,
+          title: `${fromWaypoint?.name || 'Start'} to ${toWaypoint?.name || 'Next Stop'}`,
           details: `Drive ${dayDistance.toFixed(0)} km`,
           time: `${Math.floor(dayDuration / 60)}h ${Math.floor(dayDuration % 60)}m`,
           distanceKm: dayDistance,
-          durationMin: dayDuration
+          durationMin: dayDuration,
+          lat: toWaypoint.lat,
+          lng: toWaypoint.lng
         });
       }
 
       // Add arrival at destination
-      if (i < validWaypoints.length - 1) {
-        dayItems.push({
-          id: `arrival-${i}`,
-          type: 'poi',
-          title: `Arrive at ${validWaypoints[i + 1]?.name || 'Destination'}`,
-          details: 'Explore the area',
-          time: '2-3 hours'
-        });
-      }
+      const destinationWaypoint = i + 1 < validWaypoints.length ? validWaypoints[i + 1] : validWaypoints[validWaypoints.length - 1];
+      
+      dayItems.push({
+        id: `arrival-${i}`,
+        type: 'poi',
+        title: `Explore ${destinationWaypoint?.name || 'Destination'}`,
+        details: 'Visit local attractions and landmarks',
+        time: '2-3 hours',
+        lat: destinationWaypoint.lat,
+        lng: destinationWaypoint.lng
+      });
 
       // Add lodging suggestion
       dayItems.push({

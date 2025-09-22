@@ -3,7 +3,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import RoutePlanner from "@/components/planner/RoutePlanner";
 import DayByDay from "@/components/planner/DayByDay";
-import InteractiveMap from "@/components/InteractiveMap";
+import MapCanvas from "@/components/planner/MapCanvas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,6 +86,8 @@ const PlanTrip = () => {
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
   const [routeData, setRouteData] = useState<RouteData>({});
   const [dayPlans, setDayPlans] = useState<any[]>([]);
+  const [showPOIs, setShowPOIs] = useState(false);
+  const [poiFilters, setPoiFilters] = useState({ fuel: false, food: false });
   
   const googleMapsApiKey = 'AIzaSyBbJbSHj4dI5igT0K5WPFISHYNJuVy48oE';
 
@@ -726,15 +728,58 @@ const PlanTrip = () => {
 
               <TabsContent value="map" className="space-y-4">
                 <Card>
-                  <CardContent className="p-0">
-                    <div className="h-[600px] rounded-lg overflow-hidden">
-                      <InteractiveMap 
-                        className="h-full"
-                        showSearch={true}
-                        showControls={true}
-                        initialCenter={{ lat: 20.5937, lng: 78.9629 }}
-                        initialZoom={5}
-                        apiKey={googleMapsApiKey}
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold">Interactive Route Map</h3>
+                      <div className="flex gap-2">
+                        <Button
+                          variant={showPOIs ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setShowPOIs(!showPOIs)}
+                        >
+                          <MapPin className="h-4 w-4 mr-1" />
+                          Show POIs
+                        </Button>
+                        {showPOIs && (
+                          <>
+                            <Button
+                              variant={poiFilters.fuel ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setPoiFilters(prev => ({ ...prev, fuel: !prev.fuel }))}
+                            >
+                              <Fuel className="h-4 w-4 mr-1" />
+                              Fuel
+                            </Button>
+                            <Button
+                              variant={poiFilters.food ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setPoiFilters(prev => ({ ...prev, food: !prev.food }))}
+                            >
+                              Food
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="h-[600px]">
+                      <MapCanvas
+                        waypoints={waypoints}
+                        routeData={routeData}
+                        googleMapsApiKey={googleMapsApiKey}
+                        onWaypointDrag={(waypointId, lat, lng) => {
+                          setWaypoints(prev => prev.map(wp => 
+                            wp.id === waypointId 
+                              ? { ...wp, lat, lng }
+                              : wp
+                          ));
+                        }}
+                        showPOIs={showPOIs}
+                        poiFilters={poiFilters}
+                        onLocationSelect={(lat, lng, address) => {
+                          // Could be used to add new waypoints from map clicks
+                          console.log('Location selected from map:', lat, lng, address);
+                        }}
                       />
                     </div>
                   </CardContent>
