@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   MapPin, 
   Plus, 
@@ -74,10 +75,13 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
     if (!query.trim()) return;
 
     try {
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${googleMapsApiKey}`
-      );
-      const data = await response.json();
+      const { data, error } = await supabase.functions.invoke('geocoding', {
+        body: { address: query }
+      });
+      
+      if (error) {
+        throw error;
+      }
       
       if (data.results && data.results.length > 0) {
         const result = data.results[0];
@@ -92,6 +96,11 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
       }
     } catch (error) {
       console.error('Geocoding error:', error);
+      toast({
+        title: "Geocoding Error",
+        description: "Failed to find location. Please try a different address.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -106,31 +115,33 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
     if (!start || !end) return;
 
     try {
-      // Build waypoints parameter for Google Directions API
-      let waypointsParam = '';
+      // Build request data for Supabase Edge Function
+      const requestData: any = {
+        origin: `${start.lat},${start.lng}`,
+        destination: `${end.lat},${end.lng}`
+      };
+
       if (intermediatePoints.length > 0) {
-        waypointsParam = '&waypoints=' + intermediatePoints.map(wp => `${wp.lat},${wp.lng}`).join('|');
+        requestData.waypoints = intermediatePoints.map(wp => `${wp.lat},${wp.lng}`).join('|');
       }
 
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/directions/json?origin=${start.lat},${start.lng}&destination=${end.lat},${end.lng}${waypointsParam}&key=${googleMapsApiKey}`,
-        { mode: 'cors' }
-      );
+      const { data, error } = await supabase.functions.invoke('directions', {
+        body: requestData
+      });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (error) {
+        throw error;
       }
-
-      const data = await response.json();
 
       if (data.status === 'OK' && data.routes && data.routes.length > 0) {
         const route = data.routes[0];
-        const leg = route.legs[0];
+        const totalDistance = route.legs.reduce((sum: number, leg: any) => sum + (leg.distance?.value || 0), 0);
+        const totalDuration = route.legs.reduce((sum: number, leg: any) => sum + (leg.duration?.value || 0), 0);
         
         const newRouteData = {
           polyline: route.overview_polyline.points,
-          distance: leg.distance?.value ? leg.distance.value / 1000 : 0, // Convert to km
-          duration: leg.duration?.value ? leg.duration.value / 60 : 0, // Convert to minutes
+          distance: totalDistance / 1000, // Convert to km
+          duration: totalDuration / 60, // Convert to minutes
           steps: route.legs.flatMap((leg: any) => leg.steps || []),
           coordinates: [start, ...intermediatePoints, end].map(wp => ({ lat: wp.lat, lng: wp.lng }))
         };
@@ -144,7 +155,7 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
       console.error('Route calculation error:', error);
       toast({
         title: "Route Error",
-        description: error instanceof Error ? error.message : "Failed to calculate route. Please check your waypoints.",
+        description: error instanceof Error ? error.message : "Failed to calculate route. Please check your waypoints and try again.",
         variant: "destructive"
       });
     }
@@ -222,27 +233,27 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
       for (const coord of routeData.coordinates) {
         for (const type of types) {
           try {
-            const response = await fetch(
-              `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${coord.lat},${coord.lng}&radius=10000&type=${type}&key=${googleMapsApiKey}`,
-              { mode: 'cors' }
-            );
-            
-            if (response.ok) {
-              const data = await response.json();
-              if (data.results) {
-                const pois = data.results.slice(0, 3).map((place: any) => ({
-                  id: place.place_id,
-                  name: place.name,
-                  type: type === 'gas_station' ? 'fuel' : 'food',
-                  lat: place.geometry.location.lat,
-                  lng: place.geometry.location.lng,
-                  rating: place.rating,
-                  distance: Math.floor(Math.random() * 20) + 1, // Approximate distance
-                  address: place.vicinity,
-                  isOpen: place.opening_hours?.open_now
-                }));
-                allPOIs.push(...pois);
+            const { data, error } = await supabase.functions.invoke('places-nearby', {
+              body: {
+                location: `${coord.lat},${coord.lng}`,
+                radius: '10000',
+                type
               }
+            });
+            
+            if (!error && data.results) {
+              const pois = data.results.slice(0, 3).map((place: any) => ({
+                id: place.place_id,
+                name: place.name,
+                type: type === 'gas_station' ? 'fuel' : 'food',
+                lat: place.geometry.location.lat,
+                lng: place.geometry.location.lng,
+                rating: place.rating,
+                distance: Math.floor(Math.random() * 20) + 1, // Approximate distance
+                address: place.vicinity,
+                isOpen: place.opening_hours?.open_now
+              }));
+              allPOIs.push(...pois);
             }
           } catch (error) {
             console.warn(`Failed to fetch ${type} POIs:`, error);

@@ -641,7 +641,7 @@ const PlanTrip = () => {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total Duration</span>
                     <span className="font-medium">
-                      {routeData.duration ? `${Math.floor(routeData.duration / 1440)} days ${Math.floor((routeData.duration % 1440) / 60)}h` : 'Not calculated'}
+                      {routeData.duration ? `${Math.floor(routeData.duration / 60)}h ${Math.floor(routeData.duration % 60)}m` : 'Not calculated'}
                     </span>
                   </div>
                   <div className="flex justify-between">
