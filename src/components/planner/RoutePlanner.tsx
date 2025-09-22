@@ -74,12 +74,17 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
   const geocodeLocation = async (query: string, waypointId: string) => {
     if (!query.trim()) return;
 
+    console.log('Starting geocoding for:', query, waypointId);
+    
     try {
       const { data, error } = await supabase.functions.invoke('geocoding', {
         body: { address: query }
       });
       
+      console.log('Geocoding response:', { data, error });
+      
       if (error) {
+        console.error('Supabase function error:', error);
         throw error;
       }
       
@@ -87,6 +92,8 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
         const result = data.results[0];
         const lat = result.geometry.location.lat;
         const lng = result.geometry.location.lng;
+        
+        console.log('Geocoding successful:', { lat, lng, address: result.formatted_address });
         
         setWaypoints(prev => prev.map(wp => 
           wp.id === waypointId 
@@ -99,6 +106,7 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
           description: `Found: ${result.formatted_address}`,
         });
       } else {
+        console.warn('No geocoding results found for:', query);
         throw new Error('No results found');
       }
     } catch (error) {
@@ -113,13 +121,23 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
 
   const calculateRoute = async () => {
     const validWaypoints = waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0);
-    if (validWaypoints.length < 2) return;
+    console.log('Calculating route with waypoints:', validWaypoints);
+    
+    if (validWaypoints.length < 2) {
+      console.log('Not enough waypoints for route calculation');
+      return;
+    }
 
     const start = validWaypoints.find(wp => wp.type === 'start');
     const end = validWaypoints.find(wp => wp.type === 'end');
     const intermediatePoints = validWaypoints.filter(wp => wp.type === 'waypoint');
 
-    if (!start || !end) return;
+    if (!start || !end) {
+      console.log('Missing start or end waypoint');
+      return;
+    }
+
+    console.log('Route calculation:', { start, end, intermediatePoints });
 
     try {
       // Build request data for Supabase Edge Function
@@ -132,11 +150,16 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
         requestData.waypoints = intermediatePoints.map(wp => `${wp.lat},${wp.lng}`).join('|');
       }
 
+      console.log('Sending directions request:', requestData);
+
       const { data, error } = await supabase.functions.invoke('directions', {
         body: requestData
       });
 
+      console.log('Directions response:', { data, error });
+
       if (error) {
+        console.error('Directions function error:', error);
         throw error;
       }
 
@@ -153,9 +176,17 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
           coordinates: [start, ...intermediatePoints, end].map(wp => ({ lat: wp.lat, lng: wp.lng }))
         };
         
+        console.log('Route calculated successfully:', newRouteData);
+        
         setRouteData(newRouteData);
         onRouteChange(waypoints, newRouteData);
+        
+        toast({
+          title: "Route Calculated",
+          description: `${newRouteData.distance.toFixed(0)} km in ${Math.floor(newRouteData.duration / 60)}h ${Math.floor(newRouteData.duration % 60)}m`,
+        });
       } else {
+        console.error('Directions API error:', data);
         throw new Error(data.error_message || 'Route not found');
       }
     } catch (error) {

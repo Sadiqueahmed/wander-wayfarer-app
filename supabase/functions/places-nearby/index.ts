@@ -12,10 +12,19 @@ serve(async (req) => {
   }
 
   try {
-    const url = new URL(req.url)
-    const location = url.searchParams.get('location')
-    const radius = url.searchParams.get('radius') || '5000'
-    const type = url.searchParams.get('type')
+    let location, radius, type;
+    
+    if (req.method === 'POST') {
+      const body = await req.json()
+      location = body.location
+      radius = body.radius || '5000'
+      type = body.type
+    } else {
+      const url = new URL(req.url)
+      location = url.searchParams.get('location')
+      radius = url.searchParams.get('radius') || '5000'
+      type = url.searchParams.get('type')
+    }
     
     if (!location) {
       return new Response(

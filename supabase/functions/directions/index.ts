@@ -12,10 +12,19 @@ serve(async (req) => {
   }
 
   try {
-    const url = new URL(req.url)
-    const origin = url.searchParams.get('origin')
-    const destination = url.searchParams.get('destination')
-    const waypoints = url.searchParams.get('waypoints')
+    let origin, destination, waypoints;
+    
+    if (req.method === 'POST') {
+      const body = await req.json()
+      origin = body.origin
+      destination = body.destination
+      waypoints = body.waypoints
+    } else {
+      const url = new URL(req.url)
+      origin = url.searchParams.get('origin')
+      destination = url.searchParams.get('destination')
+      waypoints = url.searchParams.get('waypoints')
+    }
     
     if (!origin || !destination) {
       return new Response(

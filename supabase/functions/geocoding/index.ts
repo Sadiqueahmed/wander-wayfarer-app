@@ -12,8 +12,15 @@ serve(async (req) => {
   }
 
   try {
-    const url = new URL(req.url)
-    const address = url.searchParams.get('address')
+    let address;
+    
+    if (req.method === 'POST') {
+      const body = await req.json()
+      address = body.address
+    } else {
+      const url = new URL(req.url)
+      address = url.searchParams.get('address')
+    }
     
     if (!address) {
       return new Response(
