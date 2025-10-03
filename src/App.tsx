@@ -12,6 +12,7 @@ import Northeast from "./pages/Northeast";
 import Guides from "./pages/Guides";
 import Community from "./pages/Community";
 import AuthPage from "./pages/AuthPage";
+import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
           <Route path="/guides" element={<Guides />} />
           <Route path="/community" element={<Community />} />
           <Route path="/auth" element={<AuthPage />} />
+          <Route path="/profile" element={<Profile />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

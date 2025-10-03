@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import { 
   User, 
   Mail, 
@@ -16,6 +19,10 @@ import {
 } from "lucide-react";
 
 const AuthPage = () => {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+  
   const [loginForm, setLoginForm] = useState({
     email: "",
     password: ""
@@ -28,26 +35,140 @@ const AuthPage = () => {
     confirmPassword: ""
   });
 
-  const handleLogin = (e: React.FormEvent) => {
+  useEffect(() => {
+    // Check if user is already logged in
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        navigate('/');
+      }
+    });
+  }, [navigate]);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Login:", loginForm);
-    // Handle login logic
+    setLoading(true);
+
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: loginForm.email,
+        password: loginForm.password,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Success!",
+        description: "You've been logged in successfully.",
+      });
+      navigate('/');
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Login failed",
+        description: error.message || "Invalid credentials. Please try again.",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSignup = (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Signup:", signupForm);
-    // Handle signup logic
+    
+    if (signupForm.password !== signupForm.confirmPassword) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Passwords do not match.",
+      });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: signupForm.email,
+        password: signupForm.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+          data: {
+            full_name: signupForm.name,
+          }
+        }
+      });
+
+      if (error) throw error;
+
+      // Create profile entry
+      if (data.user) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            user_id: data.user.id,
+            full_name: signupForm.name,
+          });
+
+        if (profileError) console.error('Profile creation error:', profileError);
+      }
+
+      toast({
+        title: "Success!",
+        description: "Account created successfully. You can now log in.",
+      });
+      
+      // Switch to login tab
+      setTimeout(() => {
+        const loginTab = document.querySelector('[value="login"]') as HTMLElement;
+        loginTab?.click();
+      }, 500);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Signup failed",
+        description: error.message || "Could not create account. Please try again.",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleGoogleAuth = () => {
-    console.log("Google auth");
-    // Handle Google authentication
+  const handleGoogleAuth = async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/`,
+        }
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Authentication failed",
+        description: error.message || "Could not authenticate with Google.",
+      });
+    }
   };
 
-  const handleFacebookAuth = () => {
-    console.log("Facebook auth");
-    // Handle Facebook authentication
+  const handleFacebookAuth = async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'facebook',
+        options: {
+          redirectTo: `${window.location.origin}/`,
+        }
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Authentication failed",
+        description: error.message || "Could not authenticate with Facebook.",
+      });
+    }
   };
 
   return (
@@ -120,8 +241,8 @@ const AuthPage = () => {
                       </a>
                     </div>
 
-                    <Button type="submit" className="w-full gradient-hero text-white border-0">
-                      Sign In
+                    <Button type="submit" className="w-full gradient-hero text-white border-0" disabled={loading}>
+                      {loading ? "Signing in..." : "Sign In"}
                     </Button>
                   </form>
 
@@ -232,8 +353,8 @@ const AuthPage = () => {
                       </span>
                     </div>
 
-                    <Button type="submit" className="w-full gradient-hero text-white border-0">
-                      Create Account
+                    <Button type="submit" className="w-full gradient-hero text-white border-0" disabled={loading}>
+                      {loading ? "Creating account..." : "Create Account"}
                     </Button>
                   </form>
 
