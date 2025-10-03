@@ -125,6 +125,7 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
     
     if (validWaypoints.length < 2) {
       console.log('Not enough waypoints for route calculation');
+      setRouteData({});
       return;
     }
 
@@ -134,6 +135,16 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
 
     if (!start || !end) {
       console.log('Missing start or end waypoint');
+      toast({
+        title: "Missing Locations",
+        description: "Please add both start and end locations",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (start.lat === 0 || start.lng === 0 || end.lat === 0 || end.lng === 0) {
+      console.log('Invalid coordinates for start or end');
       return;
     }
 
@@ -160,7 +171,11 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
 
       if (error) {
         console.error('Directions function error:', error);
-        throw error;
+        throw new Error('Failed to connect to directions service');
+      }
+
+      if (!data) {
+        throw new Error('No response from directions service');
       }
 
       if (data.status === 'OK' && data.routes && data.routes.length > 0) {
@@ -185,15 +200,22 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
           title: "Route Calculated",
           description: `${newRouteData.distance.toFixed(0)} km in ${Math.floor(newRouteData.duration / 60)}h ${Math.floor(newRouteData.duration % 60)}m`,
         });
+      } else if (data.status === 'ZERO_RESULTS') {
+        throw new Error('No route found between these locations. Try different destinations.');
+      } else if (data.status === 'NOT_FOUND') {
+        throw new Error('One or more locations could not be found.');
+      } else if (data.status === 'INVALID_REQUEST') {
+        throw new Error('Invalid route request. Please check your locations.');
       } else {
         console.error('Directions API error:', data);
-        throw new Error(data.error_message || 'Route not found');
+        throw new Error(data.error_message || data.status || 'Unable to calculate route');
       }
     } catch (error) {
       console.error('Route calculation error:', error);
+      setRouteData({});
       toast({
         title: "Route Error",
-        description: error instanceof Error ? error.message : "Failed to calculate route. Please check your waypoints and try again.",
+        description: error instanceof Error ? error.message : "Failed to calculate route. Please try different locations.",
         variant: "destructive"
       });
     }
