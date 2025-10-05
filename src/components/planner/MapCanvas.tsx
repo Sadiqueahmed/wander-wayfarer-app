@@ -64,13 +64,40 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [selectedPOI, setSelectedPOI] = useState<POI | null>(null);
   const [nearbyPOIs, setNearbyPOIs] = useState<POI[]>([]);
+  const [pickerMarker, setPickerMarker] = useState<google.maps.Marker | null>(null);
 
   // Handle map clicks for location selection
   const handleMapClick = useCallback((e: google.maps.MapMouseEvent) => {
-    if (!isPickerMode || !e.latLng || !onLocationSelect) return;
+    if (!isPickerMode || !e.latLng || !onLocationSelect || !map.current) return;
     
     const lat = e.latLng.lat();
     const lng = e.latLng.lng();
+    
+    // Remove existing picker marker if any
+    if (pickerMarker) {
+      pickerMarker.setMap(null);
+    }
+    
+    // Add a temporary marker at clicked location
+    const marker = new google.maps.Marker({
+      position: { lat, lng },
+      map: map.current,
+      animation: google.maps.Animation.DROP,
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 10,
+        fillColor: '#FF6B00',
+        fillOpacity: 1,
+        strokeColor: '#FFFFFF',
+        strokeWeight: 3
+      },
+      label: {
+        text: '📍',
+        fontSize: '20px'
+      }
+    });
+    
+    setPickerMarker(marker);
     
     // Reverse geocode to get address
     const geocoder = new google.maps.Geocoder();
@@ -81,7 +108,7 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
         onLocationSelect(lat, lng, `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
       }
     });
-  }, [isPickerMode, onLocationSelect]);
+  }, [isPickerMode, onLocationSelect, pickerMarker]);
 
   // Initialize map
   useEffect(() => {
@@ -137,6 +164,9 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
     return () => {
       markersRef.current.forEach(marker => marker.setMap(null));
       poiMarkersRef.current.forEach(marker => marker.setMap(null));
+      if (pickerMarker) {
+        pickerMarker.setMap(null);
+      }
     };
   }, [googleMapsApiKey, handleMapClick]);
 
@@ -410,10 +440,10 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
 
       {/* Picker Mode Instructions */}
       {isPickerMode && (
-        <div className="absolute top-4 left-4 bg-background/90 backdrop-blur rounded-lg p-3 shadow-lg">
-          <div className="flex items-center text-sm">
-            <MapPin className="h-4 w-4 mr-2 text-primary" />
-            Click anywhere on the map to select a location
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-primary/90 backdrop-blur rounded-lg p-3 shadow-lg border border-primary-foreground/20">
+          <div className="flex items-center text-sm text-primary-foreground font-medium">
+            <MapPin className="h-5 w-5 mr-2 animate-pulse" />
+            Click anywhere on the map to select your location 📍
           </div>
         </div>
       )}

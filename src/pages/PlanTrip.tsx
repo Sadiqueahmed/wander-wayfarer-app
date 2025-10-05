@@ -118,19 +118,35 @@ const PlanTrip = () => {
   const handleMapLocationSelect = (lat: number, lng: number, address: string) => {
     if (!pickingFor) return;
 
-    const newWaypoint: Waypoint = {
-      id: Date.now().toString(),
-      name: address,
-      lat,
-      lng,
-      type: pickingFor,
-      address
-    };
+    const locationLabel = pickingFor === 'start' ? 'Starting' : pickingFor === 'end' ? 'Ending' : 'Stop';
 
     setWaypoints(prev => {
-      // Remove existing waypoint of the same type
-      const filtered = prev.filter(wp => wp.type !== pickingFor);
-      return [...filtered, newWaypoint];
+      // Find existing waypoint of the same type
+      const existingIndex = prev.findIndex(wp => wp.type === pickingFor);
+      
+      if (existingIndex !== -1) {
+        // Update existing waypoint
+        const updated = [...prev];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          name: address,
+          lat,
+          lng,
+          address
+        };
+        return updated;
+      } else {
+        // Create new waypoint if it doesn't exist
+        const newWaypoint: Waypoint = {
+          id: pickingFor === 'start' ? 'start' : pickingFor === 'end' ? 'end' : Date.now().toString(),
+          name: address,
+          lat,
+          lng,
+          type: pickingFor,
+          address
+        };
+        return [...prev, newWaypoint];
+      }
     });
 
     // Exit picker mode
@@ -138,8 +154,8 @@ const PlanTrip = () => {
     setPickingFor(null);
 
     toast({
-      title: "Location Selected",
-      description: `${pickingFor === 'start' ? 'Start' : pickingFor === 'end' ? 'End' : 'Stop'} location: ${address}`,
+      title: "✓ Location Selected",
+      description: `${locationLabel} location: ${address.length > 50 ? address.substring(0, 50) + '...' : address}`,
     });
   };
 
