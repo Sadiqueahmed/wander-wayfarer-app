@@ -553,9 +553,11 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
                             variant="ghost"
                             size="sm"
                             onClick={() => openMapPicker(waypoint.id)}
-                            className="text-primary hover:text-primary/80"
+                            className="text-primary hover:text-primary/80 hover:bg-primary/10"
+                            title="Pick location on map"
                           >
-                            <MapPin className="h-4 w-4" />
+                            <MapPin className="h-4 w-4 mr-1" />
+                            <span className="text-xs hidden sm:inline">Pick</span>
                           </Button>
                           
                           {waypoint.type === 'waypoint' && (
