@@ -88,6 +88,8 @@ const PlanTrip = () => {
   const [dayPlans, setDayPlans] = useState<any[]>([]);
   const [showPOIs, setShowPOIs] = useState(false);
   const [poiFilters, setPoiFilters] = useState({ fuel: false, food: false });
+  const [isPickerMode, setIsPickerMode] = useState(false);
+  const [pickingFor, setPickingFor] = useState<'start' | 'end' | 'waypoint' | null>(null);
   
   const googleMapsApiKey = 'AIzaSyBbJbSHj4dI5igT0K5WPFISHYNJuVy48oE';
 
@@ -111,6 +113,43 @@ const PlanTrip = () => {
       type: wp.type,
       order: 0
     })));
+  };
+
+  const handleMapLocationSelect = (lat: number, lng: number, address: string) => {
+    if (!pickingFor) return;
+
+    const newWaypoint: Waypoint = {
+      id: Date.now().toString(),
+      name: address,
+      lat,
+      lng,
+      type: pickingFor,
+      address
+    };
+
+    setWaypoints(prev => {
+      // Remove existing waypoint of the same type
+      const filtered = prev.filter(wp => wp.type !== pickingFor);
+      return [...filtered, newWaypoint];
+    });
+
+    // Exit picker mode
+    setIsPickerMode(false);
+    setPickingFor(null);
+
+    toast({
+      title: "Location Selected",
+      description: `${pickingFor === 'start' ? 'Start' : pickingFor === 'end' ? 'End' : 'Stop'} location: ${address}`,
+    });
+  };
+
+  const enablePickerMode = (type: 'start' | 'end' | 'waypoint') => {
+    setIsPickerMode(true);
+    setPickingFor(type);
+    toast({
+      title: "Pick on Map",
+      description: `Click anywhere on the map to select ${type === 'start' ? 'start' : type === 'end' ? 'end' : 'a stop'} location`,
+    });
   };
 
   const calculateFuelCost = () => {
@@ -733,30 +772,74 @@ const PlanTrip = () => {
                       <h3 className="text-lg font-semibold">Interactive Route Map</h3>
                       <div className="flex gap-2">
                         <Button
-                          variant={showPOIs ? "default" : "outline"}
+                          variant={isPickerMode ? "default" : "outline"}
                           size="sm"
-                          onClick={() => setShowPOIs(!showPOIs)}
+                          onClick={() => {
+                            if (isPickerMode) {
+                              setIsPickerMode(false);
+                              setPickingFor(null);
+                            } else {
+                              enablePickerMode('waypoint');
+                            }
+                          }}
                         >
                           <MapPin className="h-4 w-4 mr-1" />
-                          Show POIs
+                          {isPickerMode ? 'Cancel Pick' : 'Pick on Map'}
                         </Button>
-                        {showPOIs && (
+                        {isPickerMode && (
                           <>
                             <Button
-                              variant={poiFilters.fuel ? "default" : "outline"}
+                              variant={pickingFor === 'start' ? "default" : "outline"}
                               size="sm"
-                              onClick={() => setPoiFilters(prev => ({ ...prev, fuel: !prev.fuel }))}
+                              onClick={() => enablePickerMode('start')}
                             >
-                              <Fuel className="h-4 w-4 mr-1" />
-                              Fuel
+                              Start
                             </Button>
                             <Button
-                              variant={poiFilters.food ? "default" : "outline"}
+                              variant={pickingFor === 'waypoint' ? "default" : "outline"}
                               size="sm"
-                              onClick={() => setPoiFilters(prev => ({ ...prev, food: !prev.food }))}
+                              onClick={() => enablePickerMode('waypoint')}
                             >
-                              Food
+                              Stop
                             </Button>
+                            <Button
+                              variant={pickingFor === 'end' ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => enablePickerMode('end')}
+                            >
+                              End
+                            </Button>
+                          </>
+                        )}
+                        {!isPickerMode && (
+                          <>
+                            <Button
+                              variant={showPOIs ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setShowPOIs(!showPOIs)}
+                            >
+                              <MapPin className="h-4 w-4 mr-1" />
+                              Show POIs
+                            </Button>
+                            {showPOIs && (
+                              <>
+                                <Button
+                                  variant={poiFilters.fuel ? "default" : "outline"}
+                                  size="sm"
+                                  onClick={() => setPoiFilters(prev => ({ ...prev, fuel: !prev.fuel }))}
+                                >
+                                  <Fuel className="h-4 w-4 mr-1" />
+                                  Fuel
+                                </Button>
+                                <Button
+                                  variant={poiFilters.food ? "default" : "outline"}
+                                  size="sm"
+                                  onClick={() => setPoiFilters(prev => ({ ...prev, food: !prev.food }))}
+                                >
+                                  Food
+                                </Button>
+                              </>
+                            )}
                           </>
                         )}
                       </div>
@@ -767,6 +850,7 @@ const PlanTrip = () => {
                         waypoints={waypoints}
                         routeData={routeData}
                         googleMapsApiKey={googleMapsApiKey}
+                        isPickerMode={isPickerMode}
                         onWaypointDrag={(waypointId, lat, lng) => {
                           setWaypoints(prev => prev.map(wp => 
                             wp.id === waypointId 
@@ -776,10 +860,7 @@ const PlanTrip = () => {
                         }}
                         showPOIs={showPOIs}
                         poiFilters={poiFilters}
-                        onLocationSelect={(lat, lng, address) => {
-                          // Could be used to add new waypoints from map clicks
-                          console.log('Location selected from map:', lat, lng, address);
-                        }}
+                        onLocationSelect={handleMapLocationSelect}
                       />
                     </div>
                   </CardContent>
