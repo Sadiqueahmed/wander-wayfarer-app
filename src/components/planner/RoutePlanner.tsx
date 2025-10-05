@@ -41,14 +41,19 @@ interface RouteData {
 interface RoutePlannerProps {
   onRouteChange: (waypoints: Waypoint[], routeData: RouteData) => void;
   googleMapsApiKey: string;
+  initialWaypoints?: Waypoint[];
 }
 
-const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsApiKey }) => {
+const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsApiKey, initialWaypoints }) => {
   const { toast } = useToast();
-  const [waypoints, setWaypoints] = useState<Waypoint[]>([
-    { id: 'start', name: '', lat: 0, lng: 0, type: 'start' },
-    { id: 'end', name: '', lat: 0, lng: 0, type: 'end' }
-  ]);
+  const [waypoints, setWaypoints] = useState<Waypoint[]>(
+    initialWaypoints && initialWaypoints.length > 0 
+      ? initialWaypoints 
+      : [
+          { id: 'start', name: '', lat: 0, lng: 0, type: 'start' },
+          { id: 'end', name: '', lat: 0, lng: 0, type: 'end' }
+        ]
+  );
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [activeWaypoint, setActiveWaypoint] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -380,6 +385,17 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
       description: `${poi.name} has been added to your route`,
     });
   };
+
+  // Sync with parent waypoints when they change externally (e.g., from map picker)
+  useEffect(() => {
+    if (initialWaypoints && initialWaypoints.length > 0) {
+      // Check if initialWaypoints are different from current waypoints
+      const isDifferent = JSON.stringify(initialWaypoints) !== JSON.stringify(waypoints);
+      if (isDifferent) {
+        setWaypoints(initialWaypoints);
+      }
+    }
+  }, [initialWaypoints]);
 
   // Recalculate route when waypoints change
   useEffect(() => {

@@ -771,6 +771,7 @@ const PlanTrip = () => {
                 <RoutePlanner 
                   onRouteChange={handleRouteChange}
                   googleMapsApiKey={googleMapsApiKey}
+                  initialWaypoints={waypoints}
                 />
               </TabsContent>
               <TabsContent value="itinerary" className="space-y-4">
