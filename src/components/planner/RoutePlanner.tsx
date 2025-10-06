@@ -392,7 +392,17 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
       // Check if initialWaypoints are different from current waypoints
       const isDifferent = JSON.stringify(initialWaypoints) !== JSON.stringify(waypoints);
       if (isDifferent) {
+        console.log('Syncing waypoints from parent:', initialWaypoints);
         setWaypoints(initialWaypoints);
+        
+        // Trigger route calculation if we have valid start and end
+        const hasStart = initialWaypoints.some(wp => wp.type === 'start' && wp.lat !== 0);
+        const hasEnd = initialWaypoints.some(wp => wp.type === 'end' && wp.lat !== 0);
+        
+        if (hasStart && hasEnd) {
+          console.log('Valid start and end found, will calculate route');
+          // Route calculation will be triggered by the waypoints useEffect
+        }
       }
     }
   }, [initialWaypoints]);

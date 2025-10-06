@@ -121,32 +121,60 @@ const PlanTrip = () => {
     const locationLabel = pickingFor === 'start' ? 'Starting' : pickingFor === 'end' ? 'Ending' : 'Stop';
 
     setWaypoints(prev => {
-      // Find existing waypoint of the same type
-      const existingIndex = prev.findIndex(wp => wp.type === pickingFor);
+      let updated = [...prev];
       
-      if (existingIndex !== -1) {
-        // Update existing waypoint
-        const updated = [...prev];
-        updated[existingIndex] = {
-          ...updated[existingIndex],
-          name: address,
-          lat,
-          lng,
-          address
-        };
-        return updated;
+      if (pickingFor === 'start' || pickingFor === 'end') {
+        // For start/end, find and update or create
+        const existingIndex = updated.findIndex(wp => wp.type === pickingFor);
+        
+        if (existingIndex !== -1) {
+          // Update existing
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            name: address,
+            lat,
+            lng,
+            address
+          };
+        } else {
+          // Create new start/end waypoint
+          const newWaypoint: Waypoint = {
+            id: pickingFor,
+            name: address,
+            lat,
+            lng,
+            type: pickingFor,
+            address
+          };
+          
+          // Ensure proper order: start should be first, end should be last
+          if (pickingFor === 'start') {
+            updated.unshift(newWaypoint);
+          } else {
+            updated.push(newWaypoint);
+          }
+        }
       } else {
-        // Create new waypoint if it doesn't exist
+        // Add regular waypoint
         const newWaypoint: Waypoint = {
-          id: pickingFor === 'start' ? 'start' : pickingFor === 'end' ? 'end' : Date.now().toString(),
+          id: Date.now().toString(),
           name: address,
           lat,
           lng,
-          type: pickingFor,
+          type: 'waypoint',
           address
         };
-        return [...prev, newWaypoint];
+        
+        // Insert before the end waypoint
+        const endIndex = updated.findIndex(wp => wp.type === 'end');
+        if (endIndex !== -1) {
+          updated.splice(endIndex, 0, newWaypoint);
+        } else {
+          updated.push(newWaypoint);
+        }
       }
+      
+      return updated;
     });
 
     // Exit picker mode
@@ -685,6 +713,18 @@ const PlanTrip = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
+                  <div className="border-b pb-2">
+                    <div className="text-sm text-muted-foreground mb-1">Start Location</div>
+                    <div className="text-sm font-medium">
+                      {waypoints.find(wp => wp.type === 'start')?.name || 'Not set'}
+                    </div>
+                  </div>
+                  <div className="border-b pb-2">
+                    <div className="text-sm text-muted-foreground mb-1">End Location</div>
+                    <div className="text-sm font-medium">
+                      {waypoints.find(wp => wp.type === 'end')?.name || 'Not set'}
+                    </div>
+                  </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total Distance</span>
                     <span className="font-medium">
@@ -693,7 +733,9 @@ const PlanTrip = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Estimated Fuel</span>
-                    <span className="font-medium">₹{calculateFuelCost().toLocaleString()}</span>
+                    <span className="font-medium">
+                      {routeData.distance ? `₹${calculateFuelCost().toLocaleString()}` : '-'}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total Duration</span>
@@ -702,8 +744,8 @@ const PlanTrip = () => {
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Waypoints</span>
-                    <span className="font-medium">{waypoints.filter(wp => wp.type === 'waypoint').length}</span>
+                    <span className="text-muted-foreground">Stop Points</span>
+                    <span className="font-medium">{waypoints.filter(wp => wp.type === 'waypoint' && wp.lat !== 0).length}</span>
                   </div>
                 </div>
               </CardContent>

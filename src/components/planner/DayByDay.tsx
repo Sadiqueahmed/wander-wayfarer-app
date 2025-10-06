@@ -71,10 +71,24 @@ const DayByDay: React.FC<DayByDayProps> = ({ waypoints, routeData, onDaysChange 
 
   // Auto-generate days from route data
   useEffect(() => {
-    if (!routeData.distance || waypoints.length < 2) return;
+    console.log('DayByDay: Checking for regeneration', { 
+      hasDistance: !!routeData.distance, 
+      waypointsCount: waypoints.length,
+      waypoints 
+    });
+    
+    if (!routeData.distance || waypoints.length < 2) {
+      console.log('DayByDay: Not enough data to generate');
+      return;
+    }
 
     const validWaypoints = waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0);
-    if (validWaypoints.length < 2) return;
+    console.log('DayByDay: Valid waypoints:', validWaypoints.length);
+    
+    if (validWaypoints.length < 2) {
+      console.log('DayByDay: Not enough valid waypoints');
+      return;
+    }
 
     const newDays: DayPlan[] = [];
     const totalDistance = routeData.distance;
@@ -145,6 +159,7 @@ const DayByDay: React.FC<DayByDayProps> = ({ waypoints, routeData, onDaysChange 
       });
     }
 
+    console.log('DayByDay: Generated days:', newDays.length);
     setDays(newDays);
   }, [waypoints, routeData]);
 
