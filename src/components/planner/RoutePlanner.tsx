@@ -43,6 +43,7 @@ interface RoutePlannerProps {
   initialWaypoints?: Waypoint[];
 }
 
+// Route planner - uses edge functions for geocoding and directions
 const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, initialWaypoints }) => {
   const { toast } = useToast();
   const [waypoints, setWaypoints] = useState<Waypoint[]>(

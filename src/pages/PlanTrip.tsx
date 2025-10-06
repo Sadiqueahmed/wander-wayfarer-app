@@ -58,6 +58,7 @@ interface RouteData {
   coordinates?: { lat: number; lng: number }[];
 }
 
+// Trip planning component - no hardcoded API keys, all secure via edge functions
 const PlanTrip = () => {
   const { toast } = useToast();
   const { createTrip, updateTrip, trips, loading: tripsLoading } = useTrips();

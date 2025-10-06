@@ -21,6 +21,7 @@ interface Prediction {
   };
 }
 
+// Places autocomplete component - loads Google Maps without API key in URL
 const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
   value,
   onChange,
