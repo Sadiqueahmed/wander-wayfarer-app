@@ -49,8 +49,8 @@ const Header = () => {
     const { data } = await supabase
       .from('profiles')
       .select('*')
-      .eq('user_id', userId)
-      .single();
+      .eq('id', userId)
+      .maybeSingle();
     
     if (data) {
       setProfile(data);

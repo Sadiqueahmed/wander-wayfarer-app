@@ -4,24 +4,33 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { z } from "zod";
 import { 
   User, 
   Mail, 
   Lock, 
   Globe,
   Chrome,
-  Facebook
+  Facebook,
+  Loader2
 } from "lucide-react";
+
+// Validation schemas
+const emailSchema = z.string().email("Please enter a valid email address").max(255);
+const passwordSchema = z.string().min(6, "Password must be at least 6 characters").max(100);
+const nameSchema = z.string().min(2, "Name must be at least 2 characters").max(100);
 
 const AuthPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string; name?: string; confirmPassword?: string }>({});
   
   const [loginForm, setLoginForm] = useState({
     email: "",
@@ -36,28 +45,79 @@ const AuthPage = () => {
   });
 
   useEffect(() => {
-    // Check if user is already logged in
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Check if user is already logged in and redirect
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         navigate('/');
       }
+    };
+    
+    checkAuth();
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session && event === 'SIGNED_IN') {
+        navigate('/');
+      }
     });
+
+    return () => subscription.unsubscribe();
   }, [navigate]);
+
+  const validateLogin = () => {
+    const newErrors: typeof errors = {};
+    
+    try {
+      emailSchema.parse(loginForm.email);
+    } catch (error) {
+      if (error instanceof z.ZodError) newErrors.email = error.errors[0].message;
+    }
+
+    try {
+      passwordSchema.parse(loginForm.password);
+    } catch (error) {
+      if (error instanceof z.ZodError) newErrors.password = error.errors[0].message;
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!validateLogin()) return;
+
     setLoading(true);
 
     try {
       const { error } = await supabase.auth.signInWithPassword({
-        email: loginForm.email,
+        email: loginForm.email.trim(),
         password: loginForm.password,
       });
 
-      if (error) throw error;
+      if (error) {
+        if (error.message.includes("Invalid login credentials")) {
+          toast({
+            variant: "destructive",
+            title: "Login Failed",
+            description: "Invalid email or password. Please try again.",
+          });
+        } else if (error.message.includes("Email not confirmed")) {
+          toast({
+            variant: "destructive",
+            title: "Email Not Confirmed",
+            description: "Please check your email and confirm your account.",
+          });
+        } else {
+          throw error;
+        }
+        return;
+      }
 
       toast({
-        title: "Success!",
+        title: "Welcome back!",
         description: "You've been logged in successfully.",
       });
       navigate('/');
@@ -65,59 +125,86 @@ const AuthPage = () => {
       toast({
         variant: "destructive",
         title: "Login failed",
-        description: error.message || "Invalid credentials. Please try again.",
+        description: error.message || "An unexpected error occurred.",
       });
     } finally {
       setLoading(false);
     }
   };
 
+  const validateSignup = () => {
+    const newErrors: typeof errors = {};
+    
+    try {
+      nameSchema.parse(signupForm.name);
+    } catch (error) {
+      if (error instanceof z.ZodError) newErrors.name = error.errors[0].message;
+    }
+
+    try {
+      emailSchema.parse(signupForm.email);
+    } catch (error) {
+      if (error instanceof z.ZodError) newErrors.email = error.errors[0].message;
+    }
+
+    try {
+      passwordSchema.parse(signupForm.password);
+    } catch (error) {
+      if (error instanceof z.ZodError) newErrors.password = error.errors[0].message;
+    }
+
+    if (signupForm.password !== signupForm.confirmPassword) {
+      newErrors.confirmPassword = "Passwords do not match";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (signupForm.password !== signupForm.confirmPassword) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Passwords do not match.",
-      });
-      return;
-    }
+    if (!validateSignup()) return;
 
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email: signupForm.email,
+      const { error } = await supabase.auth.signUp({
+        email: signupForm.email.trim(),
         password: signupForm.password,
         options: {
           emailRedirectTo: `${window.location.origin}/`,
           data: {
-            full_name: signupForm.name,
+            full_name: signupForm.name.trim(),
           }
         }
       });
 
-      if (error) throw error;
-
-      // Create profile entry
-      if (data.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            user_id: data.user.id,
-            full_name: signupForm.name,
+      if (error) {
+        if (error.message.includes("User already registered")) {
+          toast({
+            variant: "destructive",
+            title: "Account Exists",
+            description: "An account with this email already exists. Please log in instead.",
           });
-
-        if (profileError) console.error('Profile creation error:', profileError);
+          // Switch to login tab
+          setTimeout(() => {
+            const loginTab = document.querySelector('[value="login"]') as HTMLElement;
+            loginTab?.click();
+          }, 500);
+        } else {
+          throw error;
+        }
+        return;
       }
 
       toast({
-        title: "Success!",
-        description: "Account created successfully. You can now log in.",
+        title: "Account Created!",
+        description: "Please check your email to confirm your account, then you can log in.",
       });
       
-      // Switch to login tab
+      // Clear form and switch to login tab
+      setSignupForm({ name: "", email: "", password: "", confirmPassword: "" });
       setTimeout(() => {
         const loginTab = document.querySelector('[value="login"]') as HTMLElement;
         loginTab?.click();
@@ -202,47 +289,52 @@ const AuthPage = () => {
                 <TabsContent value="login" className="space-y-4">
                   <form onSubmit={handleLogin} className="space-y-4">
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Email</label>
+                      <Label htmlFor="login-email">Email</Label>
                       <div className="relative">
                         <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
+                          id="login-email"
                           type="email"
-                          placeholder="your@email.com"
+                          placeholder="you@example.com"
                           value={loginForm.email}
-                          onChange={(e) => setLoginForm({...loginForm, email: e.target.value})}
+                          onChange={(e) => {
+                            setLoginForm({...loginForm, email: e.target.value});
+                            setErrors({...errors, email: undefined});
+                          }}
                           className="pl-10"
-                          required
+                          disabled={loading}
                         />
                       </div>
+                      {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Password</label>
+                      <Label htmlFor="login-password">Password</Label>
                       <div className="relative">
                         <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
+                          id="login-password"
                           type="password"
                           placeholder="Enter your password"
                           value={loginForm.password}
-                          onChange={(e) => setLoginForm({...loginForm, password: e.target.value})}
+                          onChange={(e) => {
+                            setLoginForm({...loginForm, password: e.target.value});
+                            setErrors({...errors, password: undefined});
+                          }}
                           className="pl-10"
-                          required
+                          disabled={loading}
                         />
                       </div>
-                    </div>
-
-                    <div className="flex items-center justify-between text-sm">
-                      <label className="flex items-center space-x-2">
-                        <input type="checkbox" className="rounded" />
-                        <span>Remember me</span>
-                      </label>
-                      <a href="#" className="text-primary hover:underline">
-                        Forgot password?
-                      </a>
+                      {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
                     </div>
 
                     <Button type="submit" className="w-full gradient-hero text-white border-0" disabled={loading}>
-                      {loading ? "Signing in..." : "Sign In"}
+                      {loading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Signing in...
+                        </>
+                      ) : "Sign In"}
                     </Button>
                   </form>
 
@@ -280,81 +372,92 @@ const AuthPage = () => {
                 <TabsContent value="signup" className="space-y-4">
                   <form onSubmit={handleSignup} className="space-y-4">
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Full Name</label>
+                      <Label htmlFor="signup-name">Full Name</Label>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
+                          id="signup-name"
                           type="text"
                           placeholder="John Doe"
                           value={signupForm.name}
-                          onChange={(e) => setSignupForm({...signupForm, name: e.target.value})}
+                          onChange={(e) => {
+                            setSignupForm({...signupForm, name: e.target.value});
+                            setErrors({...errors, name: undefined});
+                          }}
                           className="pl-10"
-                          required
+                          disabled={loading}
                         />
                       </div>
+                      {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Email</label>
+                      <Label htmlFor="signup-email">Email</Label>
                       <div className="relative">
                         <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
+                          id="signup-email"
                           type="email"
-                          placeholder="your@email.com"
+                          placeholder="you@example.com"
                           value={signupForm.email}
-                          onChange={(e) => setSignupForm({...signupForm, email: e.target.value})}
+                          onChange={(e) => {
+                            setSignupForm({...signupForm, email: e.target.value});
+                            setErrors({...errors, email: undefined});
+                          }}
                           className="pl-10"
-                          required
+                          disabled={loading}
                         />
                       </div>
+                      {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Password</label>
+                      <Label htmlFor="signup-password">Password</Label>
                       <div className="relative">
                         <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
+                          id="signup-password"
                           type="password"
-                          placeholder="Create a password"
+                          placeholder="Create a password (min. 6 characters)"
                           value={signupForm.password}
-                          onChange={(e) => setSignupForm({...signupForm, password: e.target.value})}
+                          onChange={(e) => {
+                            setSignupForm({...signupForm, password: e.target.value});
+                            setErrors({...errors, password: undefined});
+                          }}
                           className="pl-10"
-                          required
+                          disabled={loading}
                         />
                       </div>
+                      {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Confirm Password</label>
+                      <Label htmlFor="signup-confirm">Confirm Password</Label>
                       <div className="relative">
                         <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
+                          id="signup-confirm"
                           type="password"
                           placeholder="Confirm your password"
                           value={signupForm.confirmPassword}
-                          onChange={(e) => setSignupForm({...signupForm, confirmPassword: e.target.value})}
+                          onChange={(e) => {
+                            setSignupForm({...signupForm, confirmPassword: e.target.value});
+                            setErrors({...errors, confirmPassword: undefined});
+                          }}
                           className="pl-10"
-                          required
+                          disabled={loading}
                         />
                       </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2 text-sm">
-                      <input type="checkbox" className="rounded" required />
-                      <span className="text-muted-foreground">
-                        I agree to the{" "}
-                        <a href="#" className="text-primary hover:underline">
-                          Terms of Service
-                        </a>{" "}
-                        and{" "}
-                        <a href="#" className="text-primary hover:underline">
-                          Privacy Policy
-                        </a>
-                      </span>
+                      {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword}</p>}
                     </div>
 
                     <Button type="submit" className="w-full gradient-hero text-white border-0" disabled={loading}>
-                      {loading ? "Creating account..." : "Create Account"}
+                      {loading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Creating account...
+                        </>
+                      ) : "Create Account"}
                     </Button>
                   </form>
 
