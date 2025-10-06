@@ -324,31 +324,70 @@ const DayByDay: React.FC<DayByDayProps> = ({ waypoints, routeData, onDaysChange 
     }
   };
 
+  if (days.length === 0) {
+    return (
+      <Card className="p-12">
+        <div className="text-center space-y-4">
+          <MapPin className="h-16 w-16 mx-auto text-muted-foreground opacity-50" />
+          <div>
+            <h3 className="text-lg font-semibold mb-2">No Itinerary Yet</h3>
+            <p className="text-muted-foreground">
+              Plan your route first, and we'll automatically generate a day-by-day itinerary for you.
+            </p>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Day-by-Day Itinerary</h2>
-        <div className="flex gap-2 text-sm text-muted-foreground">
-          <span>{days.length} days</span>
-          <span>•</span>
-          <span>{days.reduce((acc, day) => acc + day.summary.distanceKm, 0).toFixed(0)} km total</span>
+        <div>
+          <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+            Day-by-Day Itinerary
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Your personalized travel schedule
+          </p>
+        </div>
+        <div className="flex gap-2 text-sm">
+          <Badge variant="outline" className="gap-1">
+            <Calendar className="h-3 w-3" />
+            {days.length} {days.length === 1 ? 'day' : 'days'}
+          </Badge>
+          <Badge variant="outline" className="gap-1">
+            <Navigation className="h-3 w-3" />
+            {days.reduce((acc, day) => acc + day.summary.distanceKm, 0).toFixed(0)} km
+          </Badge>
+          <Badge variant="outline" className="gap-1">
+            <DollarSign className="h-3 w-3" />
+            ₹{days.reduce((acc, day) => acc + day.summary.estimatedCost, 0).toFixed(0)}
+          </Badge>
         </div>
       </div>
 
       <DragDropContext onDragEnd={handleDragEnd}>
         <div className="space-y-6">
           {days.map((day, dayIndex) => (
-            <Card key={day.id} className="overflow-hidden">
-              <CardHeader className="pb-3">
+            <Card key={day.id} className="overflow-hidden border-l-4 border-l-primary/30 hover:border-l-primary transition-colors animate-fade-in">
+              <CardHeader className="pb-3 bg-gradient-to-r from-primary/5 to-transparent">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <Calendar className="h-5 w-5 text-primary" />
+                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Calendar className="h-5 w-5 text-primary" />
+                    </div>
                     <div>
-                      <CardTitle className="text-lg">
+                      <CardTitle className="text-lg flex items-center gap-2">
                         Day {dayIndex + 1}
                         {day.date && (
-                          <span className="ml-2 text-sm font-normal text-muted-foreground">
-                            {new Date(day.date).toLocaleDateString()}
+                          <span className="text-sm font-normal text-muted-foreground">
+                            • {new Date(day.date).toLocaleDateString('en-US', { 
+                              weekday: 'short', 
+                              month: 'short', 
+                              day: 'numeric' 
+                            })}
                           </span>
                         )}
                       </CardTitle>
@@ -356,42 +395,45 @@ const DayByDay: React.FC<DayByDayProps> = ({ waypoints, routeData, onDaysChange 
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
                       onClick={() => splitDay(day.id)}
+                      className="text-xs"
                     >
                       Split Day
                     </Button>
                     {dayIndex < days.length - 1 && (
                       <Button
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
                         onClick={() => mergeDays(day.id)}
+                        className="text-xs"
                       >
-                        Merge with Next
+                        Merge
                       </Button>
                     )}
                   </div>
                 </div>
 
-                {/* Day Summary */}
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  <div className="flex items-center">
-                    <Navigation className="h-4 w-4 mr-1" />
-                    {day.summary.distanceKm.toFixed(0)} km
+                {/* Day Summary Stats */}
+                <div className="flex items-center gap-4 mt-3 text-sm">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-background rounded-full">
+                    <Navigation className="h-4 w-4 text-blue-500" />
+                    <span className="font-medium">{day.summary.distanceKm.toFixed(0)}</span>
+                    <span className="text-muted-foreground">km</span>
                   </div>
-                  <div className="flex items-center">
-                    <Clock className="h-4 w-4 mr-1" />
-                    {Math.floor(day.summary.durationMin / 60)}h {Math.floor(day.summary.durationMin % 60)}m
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-background rounded-full">
+                    <Clock className="h-4 w-4 text-orange-500" />
+                    <span className="font-medium">{Math.floor(day.summary.durationMin / 60)}h {Math.floor(day.summary.durationMin % 60)}m</span>
                   </div>
-                  <div className="flex items-center">
-                    <DollarSign className="h-4 w-4 mr-1" />
-                    ₹{day.summary.estimatedCost.toFixed(0)}
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-background rounded-full">
+                    <DollarSign className="h-4 w-4 text-green-500" />
+                    <span className="font-medium">₹{day.summary.estimatedCost.toFixed(0)}</span>
                   </div>
                 </div>
               </CardHeader>
 
-              <CardContent>
+              <CardContent className="pt-4">
                 <Droppable droppableId={day.id}>
                   {(provided) => (
                     <div
@@ -405,105 +447,130 @@ const DayByDay: React.FC<DayByDayProps> = ({ waypoints, routeData, onDaysChange 
                             <div
                               ref={provided.innerRef}
                               {...provided.draggableProps}
-                              className={`p-3 rounded-lg border transition-colors ${
-                                snapshot.isDragging ? 'shadow-lg bg-background' : 'hover:bg-muted/50'
+                              className={`group relative pl-8 ${
+                                snapshot.isDragging ? 'z-50' : ''
                               }`}
                             >
-                              <div className="flex items-start space-x-3">
-                                <div {...provided.dragHandleProps}>
-                                  <GripVertical className="h-4 w-4 text-muted-foreground cursor-move" />
-                                </div>
-                                
+                              {/* Timeline connector */}
+                              {index < day.items.length - 1 && (
+                                <div className="absolute left-2.5 top-8 h-full w-0.5 bg-border" />
+                              )}
+                              
+                              {/* Timeline dot */}
+                              <div className="absolute left-0 top-2 h-5 w-5 rounded-full border-2 border-background bg-primary/20 flex items-center justify-center">
                                 {React.createElement(getItemIcon(item.type), {
-                                  className: `h-5 w-5 ${getItemColor(item.type)}`
+                                  className: `h-3 w-3 ${getItemColor(item.type)}`
                                 })}
+                              </div>
 
-                                <div className="flex-1">
-                                  {editingItem === item.id ? (
-                                    <div className="space-y-2">
-                                      <Input
-                                        value={item.title}
-                                        onChange={(e) => updateItem(day.id, item.id, { title: e.target.value })}
-                                        placeholder="Title"
-                                      />
-                                      <Textarea
-                                        value={item.details || ''}
-                                        onChange={(e) => updateItem(day.id, item.id, { details: e.target.value })}
-                                        placeholder="Details"
-                                        rows={2}
-                                      />
-                                      <div className="flex gap-2">
+                              <div
+                                className={`p-4 rounded-lg border transition-all ${
+                                  snapshot.isDragging 
+                                    ? 'shadow-lg bg-background border-primary scale-105' 
+                                    : 'hover:bg-muted/50 hover:border-primary/30'
+                                }`}
+                              >
+                                <div className="flex items-start space-x-3">
+                                  <div {...provided.dragHandleProps} className="mt-1">
+                                    <GripVertical className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity cursor-move" />
+                                  </div>
+
+                                  <div className="flex-1 min-w-0">
+                                    {editingItem === item.id ? (
+                                      <div className="space-y-3">
                                         <Input
-                                          value={item.time || ''}
-                                          onChange={(e) => updateItem(day.id, item.id, { time: e.target.value })}
-                                          placeholder="Time"
-                                          className="w-32"
+                                          value={item.title}
+                                          onChange={(e) => updateItem(day.id, item.id, { title: e.target.value })}
+                                          placeholder="Title"
+                                          className="font-medium"
                                         />
-                                        <Input
-                                          value={item.cost || ''}
-                                          onChange={(e) => updateItem(day.id, item.id, { cost: e.target.value })}
-                                          placeholder="Cost"
-                                          className="w-32"
+                                        <Textarea
+                                          value={item.details || ''}
+                                          onChange={(e) => updateItem(day.id, item.id, { details: e.target.value })}
+                                          placeholder="Add details..."
+                                          rows={2}
                                         />
-                                      </div>
-                                      <div className="flex gap-2">
-                                        <Button
-                                          size="sm"
-                                          onClick={() => setEditingItem(null)}
-                                        >
-                                          <Save className="h-4 w-4 mr-1" />
-                                          Save
-                                        </Button>
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => setEditingItem(null)}
-                                        >
-                                          <X className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div>
-                                      <div className="flex items-center justify-between">
-                                        <h4 className="font-medium">{item.title}</h4>
-                                        <div className="flex items-center gap-1">
-                                          {item.time && (
-                                            <Badge variant="secondary" className="text-xs">
-                                              {item.time}
-                                            </Badge>
-                                          )}
-                                          {item.cost && (
-                                            <Badge variant="outline" className="text-xs">
-                                              {item.cost}
-                                            </Badge>
-                                          )}
+                                        <div className="flex gap-2">
+                                          <Input
+                                            value={item.time || ''}
+                                            onChange={(e) => updateItem(day.id, item.id, { time: e.target.value })}
+                                            placeholder="Duration"
+                                            className="w-32"
+                                          />
+                                          <Input
+                                            value={item.cost || ''}
+                                            onChange={(e) => updateItem(day.id, item.id, { cost: e.target.value })}
+                                            placeholder="Cost"
+                                            className="w-32"
+                                          />
+                                        </div>
+                                        <div className="flex gap-2">
+                                          <Button
+                                            size="sm"
+                                            onClick={() => setEditingItem(null)}
+                                          >
+                                            <Save className="h-4 w-4 mr-1" />
+                                            Save
+                                          </Button>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setEditingItem(null)}
+                                          >
+                                            <X className="h-4 w-4" />
+                                          </Button>
                                         </div>
                                       </div>
-                                      {item.details && (
-                                        <p className="text-sm text-muted-foreground mt-1">
-                                          {item.details}
-                                        </p>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
+                                    ) : (
+                                      <div>
+                                        <div className="flex items-start justify-between gap-2">
+                                          <div className="flex-1 min-w-0">
+                                            <h4 className="font-medium text-sm leading-tight mb-1">
+                                              {item.title || 'Untitled'}
+                                            </h4>
+                                            {item.details && (
+                                              <p className="text-sm text-muted-foreground leading-relaxed">
+                                                {item.details}
+                                              </p>
+                                            )}
+                                          </div>
+                                          <div className="flex flex-wrap gap-1.5 items-start">
+                                            {item.time && (
+                                              <Badge variant="secondary" className="text-xs whitespace-nowrap">
+                                                <Clock className="h-3 w-3 mr-1" />
+                                                {item.time}
+                                              </Badge>
+                                            )}
+                                            {item.cost && (
+                                              <Badge variant="outline" className="text-xs whitespace-nowrap">
+                                                <DollarSign className="h-3 w-3 mr-1" />
+                                                {item.cost}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
 
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setEditingItem(item.id)}
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => removeItem(day.id, item.id)}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
+                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => setEditingItem(item.id)}
+                                      className="h-8 w-8 p-0"
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => removeItem(day.id, item.id)}
+                                      className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -516,38 +583,42 @@ const DayByDay: React.FC<DayByDayProps> = ({ waypoints, routeData, onDaysChange 
                 </Droppable>
 
                 {/* Add Item Buttons */}
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => addItemToDay(day.id, 'poi')}
+                    className="text-xs"
                   >
-                    <Plus className="h-4 w-4 mr-1" />
+                    <MapPin className="h-3 w-3 mr-1" />
                     Add Stop
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => addItemToDay(day.id, 'note')}
+                    className="text-xs"
                   >
-                    <Plus className="h-4 w-4 mr-1" />
+                    <Edit className="h-3 w-3 mr-1" />
                     Add Note
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => addItemToDay(day.id, 'lodging')}
+                    className="text-xs"
                   >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Lodging
+                    <Bed className="h-3 w-3 mr-1" />
+                    Add Stay
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => addItemToDay(day.id, 'photo')}
+                    className="text-xs"
                   >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Photo Op
+                    <Camera className="h-3 w-3 mr-1" />
+                    Add Photo Spot
                   </Button>
                 </div>
               </CardContent>
