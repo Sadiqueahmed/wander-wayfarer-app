@@ -9,7 +9,6 @@ interface PlacesAutocompleteProps {
   onChange: (value: string) => void;
   onPlaceSelect: (place: { placeId: string; address: string; lat: number; lng: number }) => void;
   placeholder?: string;
-  googleMapsApiKey: string;
   className?: string;
 }
 
@@ -27,7 +26,6 @@ const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
   onChange,
   onPlaceSelect,
   placeholder = "Search for a location...",
-  googleMapsApiKey,
   className
 }) => {
   const [predictions, setPredictions] = useState<Prediction[]>([]);
@@ -43,7 +41,7 @@ const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
     const loadGoogleMaps = async () => {
       if (typeof window !== 'undefined' && !window.google) {
         const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places`;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=&libraries=places`;
         script.async = true;
         script.defer = true;
         
@@ -71,7 +69,7 @@ const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
     if (stored) {
       setRecentSearches(JSON.parse(stored));
     }
-  }, [googleMapsApiKey]);
+  }, []);
 
   const fetchPredictions = async (query: string) => {
     if (!autocompleteService.current || query.length < 2) {

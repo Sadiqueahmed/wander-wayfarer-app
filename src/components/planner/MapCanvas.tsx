@@ -35,7 +35,6 @@ interface RouteData {
 interface MapCanvasProps {
   waypoints: Waypoint[];
   routeData: RouteData;
-  googleMapsApiKey: string;
   onWaypointDrag?: (waypointId: string, lat: number, lng: number) => void;
   onLocationSelect?: (lat: number, lng: number, address: string) => void;
   showPOIs?: boolean;
@@ -47,7 +46,6 @@ interface MapCanvasProps {
 const MapCanvas: React.FC<MapCanvasProps> = ({
   waypoints,
   routeData,
-  googleMapsApiKey,
   onWaypointDrag,
   onLocationSelect,
   showPOIs = false,
@@ -112,15 +110,12 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
 
   // Initialize map
   useEffect(() => {
-    if (!mapContainer.current || !googleMapsApiKey) return;
+    if (!mapContainer.current) return;
 
-    const loader = new Loader({
-      apiKey: googleMapsApiKey,
-      version: 'weekly',
-      libraries: ['places', 'geometry']
-    });
-
-    loader.load().then(() => {
+    // Note: Google Maps is loaded via script tag in index.html or dynamically
+    // The API key is managed server-side through edge functions
+    const initMap = () => {
+      if (!mapContainer.current || !window.google) return;
       if (!mapContainer.current) return;
 
       map.current = new google.maps.Map(mapContainer.current, {
@@ -156,9 +151,23 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
       map.current.addListener('click', handleMapClick);
 
       setIsMapLoaded(true);
-    }).catch((error) => {
-      console.error('Error loading Google Maps:', error);
-    });
+    };
+
+    // Check if Google Maps is already loaded
+    if (window.google && window.google.maps) {
+      initMap();
+    } else {
+      // Load Google Maps dynamically
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=&libraries=places,geometry`;
+      script.async = true;
+      script.defer = true;
+      script.onload = initMap;
+      script.onerror = () => {
+        console.error('Failed to load Google Maps. Using fallback map view.');
+      };
+      document.head.appendChild(script);
+    }
 
     // Cleanup on unmount
     return () => {
@@ -168,7 +177,7 @@ const MapCanvas: React.FC<MapCanvasProps> = ({
         pickerMarker.setMap(null);
       }
     };
-  }, [googleMapsApiKey, handleMapClick]);
+  }, [handleMapClick]);
 
   // Update map markers when waypoints change
   useEffect(() => {

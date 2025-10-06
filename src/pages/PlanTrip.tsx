@@ -90,8 +90,6 @@ const PlanTrip = () => {
   const [poiFilters, setPoiFilters] = useState({ fuel: false, food: false });
   const [isPickerMode, setIsPickerMode] = useState(false);
   const [pickingFor, setPickingFor] = useState<'start' | 'end' | 'waypoint' | null>(null);
-  
-  const googleMapsApiKey = 'AIzaSyBbJbSHj4dI5igT0K5WPFISHYNJuVy48oE';
 
   // Check authentication status
   useEffect(() => {
@@ -105,13 +103,13 @@ const PlanTrip = () => {
   const handleRouteChange = (newWaypoints: Waypoint[], newRouteData: RouteData) => {
     setWaypoints(newWaypoints);
     setRouteData(newRouteData);
-    updateWaypoints(newWaypoints.map(wp => ({
+    updateWaypoints(newWaypoints.map((wp, index) => ({
       id: wp.id,
       name: wp.name,
       lat: wp.lat,
       lng: wp.lng,
       type: wp.type,
-      order: 0
+      order: index
     })));
   };
 
@@ -812,7 +810,6 @@ const PlanTrip = () => {
               <TabsContent value="route" className="space-y-4">
                 <RoutePlanner 
                   onRouteChange={handleRouteChange}
-                  googleMapsApiKey={googleMapsApiKey}
                   initialWaypoints={waypoints}
                 />
               </TabsContent>
@@ -908,7 +905,6 @@ const PlanTrip = () => {
                       <MapCanvas
                         waypoints={waypoints}
                         routeData={routeData}
-                        googleMapsApiKey={googleMapsApiKey}
                         isPickerMode={isPickerMode}
                         onWaypointDrag={(waypointId, lat, lng) => {
                           setWaypoints(prev => prev.map(wp => 

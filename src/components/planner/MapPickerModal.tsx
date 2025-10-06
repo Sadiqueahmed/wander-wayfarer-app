@@ -9,7 +9,6 @@ interface MapPickerModalProps {
   open: boolean;
   onClose: () => void;
   onSelect: (lat: number, lng: number, address: string) => void;
-  googleMapsApiKey: string;
   initialCenter?: { lat: number; lng: number };
 }
 
@@ -17,7 +16,6 @@ const MapPickerModal: React.FC<MapPickerModalProps> = ({
   open,
   onClose,
   onSelect,
-  googleMapsApiKey,
   initialCenter = { lat: 20.5937, lng: 78.9629 }
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -32,15 +30,10 @@ const MapPickerModal: React.FC<MapPickerModalProps> = ({
   const [isMapLoaded, setIsMapLoaded] = useState(false);
 
   useEffect(() => {
-    if (!open || !mapContainer.current || !googleMapsApiKey) return;
+    if (!open || !mapContainer.current) return;
 
-    const loader = new Loader({
-      apiKey: googleMapsApiKey,
-      version: 'weekly',
-      libraries: ['places', 'geometry']
-    });
-
-    loader.load().then(() => {
+    const initMap = () => {
+      if (!mapContainer.current || !window.google) return;
       if (!mapContainer.current) return;
 
       map.current = new google.maps.Map(mapContainer.current, {
@@ -85,16 +78,30 @@ const MapPickerModal: React.FC<MapPickerModalProps> = ({
       });
 
       setIsMapLoaded(true);
-    }).catch((error) => {
-      console.error('Error loading Google Maps:', error);
-    });
+    };
+
+    // Check if Google Maps is already loaded
+    if (window.google && window.google.maps) {
+      initMap();
+    } else {
+      // Fallback - try loading dynamically
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=&libraries=places,geometry`;
+      script.async = true;
+      script.defer = true;
+      script.onload = initMap;
+      script.onerror = () => {
+        console.error('Failed to load Google Maps');
+      };
+      document.head.appendChild(script);
+    }
 
     return () => {
       if (marker.current) {
         marker.current.setMap(null);
       }
     };
-  }, [open, googleMapsApiKey, initialCenter]);
+  }, [open, initialCenter]);
 
   const searchLocation = async () => {
     if (!searchQuery.trim() || !map.current) return;

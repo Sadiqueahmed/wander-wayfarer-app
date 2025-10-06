@@ -40,11 +40,10 @@ interface RouteData {
 
 interface RoutePlannerProps {
   onRouteChange: (waypoints: Waypoint[], routeData: RouteData) => void;
-  googleMapsApiKey: string;
   initialWaypoints?: Waypoint[];
 }
 
-const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsApiKey, initialWaypoints }) => {
+const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, initialWaypoints }) => {
   const { toast } = useToast();
   const [waypoints, setWaypoints] = useState<Waypoint[]>(
     initialWaypoints && initialWaypoints.length > 0 
@@ -548,14 +547,13 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
                                      : wp
                                  ));
                                }}
-                               placeholder={
-                                 waypoint.type === 'start' ? 'Starting location (e.g., Delhi)' :
-                                 waypoint.type === 'end' ? 'End location (e.g., Shillong)' :
-                                 'Stop location'
-                               }
-                               googleMapsApiKey={googleMapsApiKey}
-                               className="border-0 bg-transparent focus:bg-background transition-colors pr-12"
-                             />
+                                placeholder={
+                                  waypoint.type === 'start' ? 'Starting location (e.g., Delhi)' :
+                                  waypoint.type === 'end' ? 'End location (e.g., Shillong)' :
+                                  'Stop location'
+                                }
+                                className="border-0 bg-transparent focus:bg-background transition-colors pr-12"
+                              />
                              
                              {/* Location status indicator */}
                              <div className="absolute right-8 top-1/2 transform -translate-y-1/2">
@@ -659,7 +657,6 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({ onRouteChange, googleMapsAp
             open={showMapPicker}
             onClose={() => setShowMapPicker(false)}
             onSelect={handleMapPickerSelect}
-            googleMapsApiKey={googleMapsApiKey}
         />
       )}
     </div>

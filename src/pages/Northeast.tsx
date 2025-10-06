@@ -153,7 +153,6 @@ const Northeast = () => {
             <MapCanvas
               waypoints={[]}
               routeData={{}}
-              googleMapsApiKey="AIzaSyBbJbSHj4dI5igT0K5WPFISHYNJuVy48oE"
               className="h-96"
             />
           </div>
