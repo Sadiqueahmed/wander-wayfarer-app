@@ -3,6 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { MapPin, Search, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { GOOGLE_MAPS_API_KEY } from '@/config/googleMaps';
 
 interface PlacesAutocompleteProps {
   value: string;
@@ -42,7 +43,7 @@ const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
     const loadGoogleMaps = async () => {
       if (typeof window !== 'undefined' && !window.google) {
         const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=&libraries=places`;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
         script.async = true;
         script.defer = true;
         

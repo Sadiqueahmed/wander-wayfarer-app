@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Loader } from '@googlemaps/js-api-loader';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader } from '@googlemaps/js-api-loader';
 import { Search, MapPin } from 'lucide-react';
+import { GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_LIBRARIES } from '@/config/googleMaps';
 
 interface MapPickerModalProps {
   open: boolean;
@@ -32,8 +33,13 @@ const MapPickerModal: React.FC<MapPickerModalProps> = ({
   useEffect(() => {
     if (!open || !mapContainer.current) return;
 
-    const initMap = () => {
-      if (!mapContainer.current || !window.google) return;
+    const loader = new Loader({
+      apiKey: GOOGLE_MAPS_API_KEY,
+      version: 'weekly',
+      libraries: GOOGLE_MAPS_LIBRARIES as any
+    });
+
+    loader.load().then(() => {
       if (!mapContainer.current) return;
 
       map.current = new google.maps.Map(mapContainer.current, {
@@ -78,23 +84,9 @@ const MapPickerModal: React.FC<MapPickerModalProps> = ({
       });
 
       setIsMapLoaded(true);
-    };
-
-    // Check if Google Maps is already loaded
-    if (window.google && window.google.maps) {
-      initMap();
-    } else {
-      // Fallback - try loading dynamically
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=&libraries=places,geometry`;
-      script.async = true;
-      script.defer = true;
-      script.onload = initMap;
-      script.onerror = () => {
-        console.error('Failed to load Google Maps');
-      };
-      document.head.appendChild(script);
-    }
+    }).catch((error) => {
+      console.error('Error loading Google Maps:', error);
+    });
 
     return () => {
       if (marker.current) {
