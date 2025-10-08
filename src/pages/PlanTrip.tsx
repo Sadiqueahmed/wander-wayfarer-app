@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import RoutePlanner from "@/components/planner/RoutePlanner";
@@ -15,6 +15,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useTrips } from "@/hooks/useTrips";
 import { useItineraryStore } from "@/store/itineraryStore";
 import { supabase } from "@/integrations/supabase/client";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { 
   MapPin, 
   Plus, 
@@ -68,6 +70,9 @@ const PlanTrip = () => {
   const [saving, setSaving] = useState(false);
   const [currentTripId, setCurrentTripId] = useState<string | null>(null);
   const [showLoadDialog, setShowLoadDialog] = useState(false);
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   const [tripData, setTripData] = useState({
     title: "My India Adventure",
@@ -99,9 +104,48 @@ const PlanTrip = () => {
       setUser(user);
     };
     getUser();
+
+    // Subscribe to auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const handleRouteChange = (newWaypoints: Waypoint[], newRouteData: RouteData) => {
+  // Auto-save functionality
+  const triggerAutoSave = useCallback(() => {
+    if (!autoSaveEnabled || !user || !currentTripId || saving) return;
+    
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      if (hasUnsavedChanges && waypoints.length >= 2) {
+        saveTrip(true); // Silent save
+      }
+    }, 3000); // Auto-save after 3 seconds of inactivity
+  }, [autoSaveEnabled, user, currentTripId, saving, hasUnsavedChanges, waypoints.length]);
+
+  // Track changes for auto-save
+  useEffect(() => {
+    if (currentTripId) {
+      setHasUnsavedChanges(true);
+      triggerAutoSave();
+    }
+  }, [tripData, waypoints, routeData, dayPlans, currentTripId, triggerAutoSave]);
+
+  // Cleanup auto-save timer
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleRouteChange = useCallback((newWaypoints: Waypoint[], newRouteData: RouteData) => {
     setWaypoints(newWaypoints);
     setRouteData(newRouteData);
     updateWaypoints(newWaypoints.map((wp, index) => ({
@@ -112,7 +156,7 @@ const PlanTrip = () => {
       type: wp.type,
       order: index
     })));
-  };
+  }, [updateWaypoints]);
 
   const handleMapLocationSelect = (lat: number, lng: number, address: string) => {
     if (!pickingFor) return;
@@ -195,40 +239,73 @@ const PlanTrip = () => {
     });
   };
 
-  const calculateFuelCost = () => {
+  const calculateFuelCost = useCallback(() => {
     const totalDistance = routeData.distance || 0;
+    if (!tripData.mileage || tripData.mileage <= 0) return 0;
     const fuelNeeded = totalDistance / tripData.mileage;
     return Math.round(fuelNeeded * tripData.fuelPrice);
-  };
+  }, [routeData.distance, tripData.mileage, tripData.fuelPrice]);
 
-  const saveTrip = async () => {
-    if (!user) {
-      toast({
-        title: "Authentication Required",
-        description: "Please sign in to save your trip. Redirecting to auth page...",
-        variant: "destructive"
-      });
-      // Redirect to auth page
-      window.location.href = '/auth';
-      return;
-    }
-
+  const validateTripData = useCallback(() => {
+    const errors: string[] = [];
+    
     if (!tripData.title.trim()) {
+      errors.push("Trip title is required");
+    }
+    
+    if (waypoints.length < 2) {
+      errors.push("Please add at least start and end locations");
+    }
+    
+    if (tripData.startDate && tripData.endDate) {
+      const start = new Date(tripData.startDate);
+      const end = new Date(tripData.endDate);
+      if (start > end) {
+        errors.push("End date must be after start date");
+      }
+    }
+    
+    if (tripData.budget && tripData.budget < 0) {
+      errors.push("Budget cannot be negative");
+    }
+    
+    if (tripData.travelers < 1) {
+      errors.push("At least 1 traveler is required");
+    }
+    
+    if (tripData.mileage <= 0) {
+      errors.push("Vehicle mileage must be greater than 0");
+    }
+    
+    return errors;
+  }, [tripData, waypoints]);
+
+  const saveTrip = async (silent = false) => {
+    if (!user) {
+      if (!silent) {
+        toast({
+          title: "Authentication Required",
+          description: "Please sign in to save your trip. Redirecting to auth page...",
+          variant: "destructive"
+        });
+        window.location.href = '/auth';
+      }
+      return;
+    }
+
+    // Validate trip data
+    const validationErrors = validateTripData();
+    if (validationErrors.length > 0 && !silent) {
       toast({
-        title: "Trip Title Required",
-        description: "Please enter a title for your trip",
+        title: "Validation Error",
+        description: validationErrors[0],
         variant: "destructive"
       });
       return;
     }
-
-    if (waypoints.length < 2) {
-      toast({
-        title: "Route Required",
-        description: "Please add at least a start and end location",
-        variant: "destructive"
-      });
-      return;
+    
+    if (validationErrors.length > 0 && silent) {
+      return; // Skip silent save if validation fails
     }
 
     setSaving(true);
@@ -260,17 +337,23 @@ const PlanTrip = () => {
       let savedTrip;
       if (currentTripId) {
         savedTrip = await updateTrip(currentTripId, tripToSave);
-        toast({
-          title: "Trip Updated!",
-          description: "Your trip has been updated successfully.",
-        });
+        setHasUnsavedChanges(false);
+        if (!silent) {
+          toast({
+            title: "Trip Updated!",
+            description: "Your trip has been updated successfully.",
+          });
+        }
       } else {
         savedTrip = await createTrip(tripToSave);
         setCurrentTripId(savedTrip.id);
-        toast({
-          title: "Trip Saved!",
-          description: "Your trip has been saved successfully.",
-        });
+        setHasUnsavedChanges(false);
+        if (!silent) {
+          toast({
+            title: "Trip Saved!",
+            description: "Your trip has been saved successfully.",
+          });
+        }
       }
       
       // Update current itinerary in store
@@ -298,11 +381,13 @@ const PlanTrip = () => {
 
     } catch (error) {
       console.error('Error saving trip:', error);
-      toast({
-        title: "Save Failed",
-        description: error instanceof Error ? error.message : "Failed to save trip. Please try again.",
-        variant: "destructive"
-      });
+      if (!silent) {
+        toast({
+          title: "Save Failed",
+          description: error instanceof Error ? error.message : "Failed to save trip. Please try again.",
+          variant: "destructive"
+        });
+      }
     } finally {
       setSaving(false);
     }
@@ -346,6 +431,11 @@ const PlanTrip = () => {
   };
 
   const startNewTrip = () => {
+    if (hasUnsavedChanges && currentTripId) {
+      const confirmed = window.confirm("You have unsaved changes. Are you sure you want to start a new trip?");
+      if (!confirmed) return;
+    }
+    
     setTripData({
       title: "My India Adventure",
       description: "",
@@ -364,6 +454,7 @@ const PlanTrip = () => {
     setRouteData({});
     setDayPlans([]);
     setCurrentTripId(null);
+    setHasUnsavedChanges(false);
     toast({
       title: "New Trip Started",
       description: "Ready to plan your new adventure!",
@@ -483,12 +574,31 @@ const PlanTrip = () => {
             {/* Trip Management */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  <FolderOpen className="h-5 w-5 mr-2" />
-                  Trip Management
+                <CardTitle className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <FolderOpen className="h-5 w-5 mr-2" />
+                    Trip Management
+                  </div>
+                  {hasUnsavedChanges && currentTripId && (
+                    <Badge variant="secondary" className="text-xs">
+                      Unsaved
+                    </Badge>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                {user && (
+                  <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                    <Label htmlFor="auto-save" className="text-sm cursor-pointer">
+                      Auto-save
+                    </Label>
+                    <Switch
+                      id="auto-save"
+                      checked={autoSaveEnabled}
+                      onCheckedChange={setAutoSaveEnabled}
+                    />
+                  </div>
+                )}
                 <Button 
                   onClick={startNewTrip}
                   variant="outline"
@@ -694,7 +804,7 @@ const PlanTrip = () => {
                     {saving ? 'Optimizing...' : 'AI Optimize'}
                   </Button>
                   <Button 
-                    onClick={saveTrip}
+                    onClick={() => saveTrip(false)}
                     disabled={saving || waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0).length < 2}
                     variant="outline"
                     className={!user ? "cursor-not-allowed opacity-50" : ""}
@@ -762,7 +872,7 @@ const PlanTrip = () => {
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  onClick={saveTrip}
+                  onClick={() => saveTrip(false)}
                   disabled={saving || waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0).length < 2}
                   className={!user ? "cursor-not-allowed opacity-50" : ""}
                 >
