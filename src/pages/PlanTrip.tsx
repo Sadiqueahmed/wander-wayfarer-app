@@ -72,6 +72,7 @@ const PlanTrip = () => {
   const [showLoadDialog, setShowLoadDialog] = useState(false);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   const [tripData, setTripData] = useState({
@@ -532,34 +533,73 @@ const PlanTrip = () => {
     });
   };
 
-  const generateAIItinerary = async () => {
-    if (waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0).length < 2) {
+  const optimizeRoute = async () => {
+    const validWaypoints = waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0);
+    
+    if (validWaypoints.length < 3) {
       toast({
-        title: "Add Route First",
-        description: "Please add start and end locations to optimize",
+        title: "More Waypoints Needed",
+        description: "Add at least one intermediate stop to optimize the route",
         variant: "destructive"
       });
       return;
     }
 
-    // Simulate AI optimization with loading state
-    setSaving(true);
-    try {
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate API call
-      
-      // Here you would integrate with an AI service
+    const hasStart = validWaypoints.some(wp => wp.type === 'start');
+    const hasEnd = validWaypoints.some(wp => wp.type === 'end');
+    
+    if (!hasStart || !hasEnd) {
       toast({
-        title: "Route Optimized!",
-        description: "Your route has been optimized for fuel efficiency and time.",
+        title: "Route Incomplete",
+        description: "Please set both start and end locations",
+        variant: "destructive"
       });
+      return;
+    }
+
+    setOptimizing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('optimize-route', {
+        body: {
+          waypoints: validWaypoints,
+          preferences: {
+            priority: 'distance', // Can be expanded: 'distance', 'time', 'fuel'
+            vehicleType: tripData.vehicleType,
+            fuelType: tripData.fuelType
+          }
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.optimized_waypoints) {
+        setWaypoints(data.optimized_waypoints);
+        
+        toast({
+          title: "✨ Route Optimized!",
+          description: data.reasoning || "Your route has been optimized for efficiency.",
+        });
+
+        // Show estimated savings if available
+        if (data.estimated_savings) {
+          const { distance_percent, time_percent } = data.estimated_savings;
+          setTimeout(() => {
+            toast({
+              title: "Estimated Savings",
+              description: `Distance: ${distance_percent}% shorter, Time: ${time_percent}% faster`,
+            });
+          }, 1500);
+        }
+      }
     } catch (error) {
+      console.error('Route optimization error:', error);
       toast({
         title: "Optimization Failed",
-        description: "AI optimization is temporarily unavailable.",
+        description: error instanceof Error ? error.message : "Failed to optimize route. Please try again.",
         variant: "destructive"
       });
     } finally {
-      setSaving(false);
+      setOptimizing(false);
     }
   };
 
@@ -796,12 +836,22 @@ const PlanTrip = () => {
 
                 <div className="flex gap-2">
                   <Button 
-                    onClick={generateAIItinerary}
-                    disabled={saving || waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0).length < 2}
+                    onClick={optimizeRoute}
+                    disabled={optimizing || saving || waypoints.filter(wp => wp.lat !== 0 && wp.lng !== 0).length < 3}
                     className="flex-1 gradient-hero text-white border-0"
+                    title="AI-powered route optimization for efficiency"
                   >
-                    {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
-                    {saving ? 'Optimizing...' : 'AI Optimize'}
+                    {optimizing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Optimizing...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        AI Optimize Route
+                      </>
+                    )}
                   </Button>
                   <Button 
                     onClick={() => saveTrip(false)}
