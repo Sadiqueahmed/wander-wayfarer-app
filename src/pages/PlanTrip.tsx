@@ -73,6 +73,12 @@ const PlanTrip = () => {
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
+  const [generatingItinerary, setGeneratingItinerary] = useState(false);
+  const [generatingRecommendations, setGeneratingRecommendations] = useState(false);
+  const [generatingBudget, setGeneratingBudget] = useState(false);
+  const [aiItinerary, setAiItinerary] = useState<any>(null);
+  const [aiRecommendations, setAiRecommendations] = useState<any>(null);
+  const [aiBudget, setAiBudget] = useState<any>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   const [tripData, setTripData] = useState({
@@ -603,6 +609,160 @@ const PlanTrip = () => {
     }
   };
 
+  const generateAIItinerary = async () => {
+    if (waypoints.length < 2) {
+      toast({
+        title: "Not enough waypoints",
+        description: "Add at least start and end locations to generate an itinerary",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!tripData.startDate || !tripData.endDate) {
+      toast({
+        title: "Missing dates",
+        description: "Please set start and end dates for your trip",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setGeneratingItinerary(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-itinerary', {
+        body: { 
+          waypoints: waypoints.map(wp => ({
+            id: wp.id,
+            name: wp.name,
+            address: wp.address,
+            type: wp.type
+          })),
+          tripData: {
+            start_date: tripData.startDate,
+            end_date: tripData.endDate,
+            budget: tripData.budget,
+            travelers: tripData.travelers,
+            vehicle_type: tripData.vehicleType
+          }
+        }
+      });
+
+      if (error) throw error;
+
+      if (data) {
+        setAiItinerary(data);
+        toast({
+          title: "✨ Itinerary Generated!",
+          description: `Created a ${data.days?.length || 0}-day detailed plan for your trip`,
+        });
+      }
+    } catch (error) {
+      console.error('Itinerary generation error:', error);
+      toast({
+        title: "Generation Failed",
+        description: error instanceof Error ? error.message : "Failed to generate itinerary",
+        variant: "destructive"
+      });
+    } finally {
+      setGeneratingItinerary(false);
+    }
+  };
+
+  const getDestinationRecommendations = async () => {
+    setGeneratingRecommendations(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-recommend-destinations', {
+        body: { 
+          preferences: {
+            travelStyle: tripData.vehicleType,
+            budget: tripData.budget,
+            travelers: tripData.travelers,
+            duration: tripData.startDate && tripData.endDate ? 
+              Math.ceil((new Date(tripData.endDate).getTime() - new Date(tripData.startDate).getTime()) / (1000 * 60 * 60 * 24)) : 
+              undefined,
+            vehicleType: tripData.vehicleType
+          }
+        }
+      });
+
+      if (error) throw error;
+
+      if (data) {
+        setAiRecommendations(data);
+        toast({
+          title: "✨ Recommendations Ready!",
+          description: `Found ${data.recommendations?.length || 0} personalized destinations for you`,
+        });
+      }
+    } catch (error) {
+      console.error('Recommendations error:', error);
+      toast({
+        title: "Generation Failed",
+        description: error instanceof Error ? error.message : "Failed to get recommendations",
+        variant: "destructive"
+      });
+    } finally {
+      setGeneratingRecommendations(false);
+    }
+  };
+
+  const generateBudgetBreakdown = async () => {
+    if (waypoints.length < 1) {
+      toast({
+        title: "No destinations",
+        description: "Add at least one destination to generate a budget breakdown",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setGeneratingBudget(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-budget-breakdown', {
+        body: { 
+          waypoints: waypoints.map(wp => ({
+            id: wp.id,
+            name: wp.name,
+            address: wp.address
+          })),
+          tripData: {
+            start_date: tripData.startDate,
+            end_date: tripData.endDate,
+            budget: tripData.budget,
+            travelers: tripData.travelers,
+            vehicle_type: tripData.vehicleType,
+            fuel_type: tripData.fuelType,
+            total_distance: routeData.distance,
+            mileage: tripData.mileage
+          }
+        }
+      });
+
+      if (error) throw error;
+
+      if (data) {
+        setAiBudget(data);
+        toast({
+          title: "✨ Budget Breakdown Ready!",
+          description: `Total estimated: ₹${data.total_estimated_cost?.toLocaleString() || 0}`,
+        });
+      }
+    } catch (error) {
+      console.error('Budget breakdown error:', error);
+      toast({
+        title: "Generation Failed",
+        description: error instanceof Error ? error.message : "Failed to generate budget breakdown",
+        variant: "destructive"
+      });
+    } finally {
+      setGeneratingBudget(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -953,10 +1113,10 @@ const PlanTrip = () => {
             </div>
 
             <Tabs defaultValue="route" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-6">
                 <TabsTrigger value="route" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                   <Route className="h-4 w-4 mr-2" />
-                  Route Planning
+                  Route
                 </TabsTrigger>
                 <TabsTrigger value="itinerary" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                   <Calendar className="h-4 w-4 mr-2" />
@@ -964,7 +1124,19 @@ const PlanTrip = () => {
                 </TabsTrigger>
                 <TabsTrigger value="map" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                   <MapPin className="h-4 w-4 mr-2" />
-                  Map View
+                  Map
+                </TabsTrigger>
+                <TabsTrigger value="ai-itinerary" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  AI Plan
+                </TabsTrigger>
+                <TabsTrigger value="recommendations" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  <Star className="h-4 w-4 mr-2" />
+                  Suggest
+                </TabsTrigger>
+                <TabsTrigger value="budget" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  <Calculator className="h-4 w-4 mr-2" />
+                  Budget
                 </TabsTrigger>
               </TabsList>
 
@@ -980,6 +1152,92 @@ const PlanTrip = () => {
                   routeData={routeData}
                   onDaysChange={setDayPlans}
                 />
+              </TabsContent>
+
+              <TabsContent value="ai-itinerary" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>AI-Generated Itinerary</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Button onClick={generateAIItinerary} disabled={generatingItinerary} className="w-full mb-4">
+                      {generatingItinerary ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generating...</> : <><Sparkles className="h-4 w-4 mr-2" />Generate Smart Itinerary</>}
+                    </Button>
+                    {aiItinerary && (
+                      <div className="space-y-4">
+                        {aiItinerary.days?.map((day: any, idx: number) => (
+                          <Card key={idx}>
+                            <CardHeader>
+                              <CardTitle className="text-lg">Day {day.day_number}: {day.location}</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-2">
+                              <div><strong>Morning:</strong> {day.morning?.activity} ({day.morning?.time})</div>
+                              <div><strong>Afternoon:</strong> {day.afternoon?.activity} ({day.afternoon?.time})</div>
+                              <div><strong>Evening:</strong> {day.evening?.activity} ({day.evening?.time})</div>
+                              <div className="text-sm text-muted-foreground mt-2">{day.notes}</div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="recommendations" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>AI Destination Recommendations</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Button onClick={getDestinationRecommendations} disabled={generatingRecommendations} className="w-full mb-4">
+                      {generatingRecommendations ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Finding...</> : <><Star className="h-4 w-4 mr-2" />Get Recommendations</>}
+                    </Button>
+                    {aiRecommendations?.recommendations && (
+                      <div className="space-y-3">
+                        {aiRecommendations.recommendations.map((rec: any, idx: number) => (
+                          <Card key={idx}>
+                            <CardContent className="p-4">
+                              <h4 className="font-semibold">{rec.name}</h4>
+                              <p className="text-sm text-muted-foreground">{rec.location}</p>
+                              <p className="text-sm mt-2">{rec.description}</p>
+                              <Badge className="mt-2">{rec.match_score}% Match</Badge>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="budget" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>AI Budget Breakdown</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Button onClick={generateBudgetBreakdown} disabled={generatingBudget} className="w-full mb-4">
+                      {generatingBudget ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Calculating...</> : <><Calculator className="h-4 w-4 mr-2" />Generate Budget</>}
+                    </Button>
+                    {aiBudget && (
+                      <div className="space-y-4">
+                        <div className="p-4 bg-primary/10 rounded-lg">
+                          <div className="text-2xl font-bold">₹{aiBudget.total_estimated_cost?.toLocaleString()}</div>
+                          <div className="text-sm text-muted-foreground">Total Estimated Cost</div>
+                        </div>
+                        {aiBudget.categories && (
+                          <div className="space-y-2">
+                            <div className="flex justify-between p-2 border-b"><span>Accommodation</span><span className="font-semibold">₹{aiBudget.categories.accommodation?.total?.toLocaleString()}</span></div>
+                            <div className="flex justify-between p-2 border-b"><span>Food</span><span className="font-semibold">₹{aiBudget.categories.food?.total?.toLocaleString()}</span></div>
+                            <div className="flex justify-between p-2 border-b"><span>Fuel</span><span className="font-semibold">₹{aiBudget.categories.fuel?.total?.toLocaleString()}</span></div>
+                            <div className="flex justify-between p-2 border-b"><span>Activities</span><span className="font-semibold">₹{aiBudget.categories.activities?.total?.toLocaleString()}</span></div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </TabsContent>
 
               <TabsContent value="map" className="space-y-4">
